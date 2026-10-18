@@ -124,6 +124,10 @@ type Policy struct {
 	// operator's configuration or a project's checked-in configuration can
 	// allow tools without asking.
 	CommandCodePermission string `json:"command_code_permission,omitempty"`
+	// AntigravityPermission selects `agy --mode`: AntigravityRequestReview
+	// ("request-review", the default), AntigravityAcceptEdits ("accept-edits"),
+	// AntigravityAuto ("auto") or AntigravityPlan ("plan").
+	AntigravityPermission string `json:"antigravity_permission,omitempty"`
 }
 
 // Grok permission answers and telemetry policy.
@@ -137,6 +141,14 @@ const (
 const (
 	CommandCodeDenyWhenAsked  = "deny-when-asked"
 	CommandCodeAllowWhenAsked = "allow-when-asked"
+)
+
+// Antigravity permission modes (`agy --mode`).
+const (
+	AntigravityRequestReview = "request-review"
+	AntigravityAcceptEdits   = "accept-edits"
+	AntigravityAuto          = "auto"
+	AntigravityPlan          = "plan"
 )
 
 type Options struct {
@@ -435,6 +447,9 @@ type Turn struct {
 	// commandCodeMessage counts the tool calls Command Code started in this
 	// turn; it names the message the next streamed text belongs to.
 	commandCodeMessage int
+	// antigravityTools tracks which Antigravity tool step IDs have emitted
+	// tool_started and tool_completed in this turn.
+	antigravityTools map[string]bool
 	// closeTools shuts the caller's tool channel when this turn ends.
 	closeTools func()
 	// claudeRefusal is why Claude refused this turn's latest request, kept for

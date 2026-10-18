@@ -10,7 +10,7 @@ import (
 )
 
 func TestEngineSpellingsArePersistedAndStable(t *testing.T) {
-	want := map[Engine]Transport{"codex": CLITransport, "claude": CLITransport, "grok": CLITransport, "command-code": CLITransport, "openai-compatible": APITransport}
+	want := map[Engine]Transport{"codex": CLITransport, "claude": CLITransport, "grok": CLITransport, "command-code": CLITransport, "antigravity": CLITransport, "openai-compatible": APITransport}
 	if len(Engines()) != len(want) {
 		t.Fatalf("engines %v", Engines())
 	}
@@ -203,6 +203,32 @@ func TestCommandCodeIsOfferedOnlyAsASession(t *testing.T) {
 	}
 }
 
+func TestAntigravityClaims(t *testing.T) {
+	if c := Support(Antigravity, Complete, Available); c.Usable() || c.Reason == "" {
+		t.Fatalf("Antigravity completion: %+v", c)
+	}
+	for _, f := range []Feature{Available, Effort, StructuredOutput, ProgressMessages, Resume, CacheSplit, IncludeGlobalSkills} {
+		if c := Support(Antigravity, Run, f); c.Availability != Native {
+			t.Errorf("Antigravity run %s: %+v", f, c)
+		}
+	}
+	for _, f := range []Feature{Available, Resume} {
+		if c := Support(Antigravity, Session, f); c.Availability != Unknown || c.Reason == "" {
+			t.Errorf("Antigravity session %s: %+v", f, c)
+		}
+	}
+	for _, f := range []Feature{Interrupt, Steer, Compact, AppendInstructions, ReplaceInstructions, RestrictTools, Sandbox, Tools, ProvidedSkills, ContextWindow, CostReport, ToolImages} {
+		if c := Support(Antigravity, Session, f); c.Usable() || c.Reason == "" {
+			t.Errorf("Antigravity session %s: %+v", f, c)
+		}
+	}
+	for _, f := range []Feature{Available, Login, Quota, Credits} {
+		if c := Support(Antigravity, Account, f); c.Availability != Unknown || c.Reason == "" {
+			t.Errorf("Antigravity account %s: %+v", f, c)
+		}
+	}
+}
+
 // The library runs an OpenAI-compatible session's loop itself, so what it
 // offers is composed, on every platform: there is no process to contain.
 func TestOpenAICompatibleSessionClaims(t *testing.T) {
@@ -227,7 +253,7 @@ func TestOpenAICompatibleSessionClaims(t *testing.T) {
 	}
 	// Every CLI session passes the caller's effort to its harness; a matrix
 	// that said otherwise would hide a working option from callers that ask.
-	for _, engine := range []Engine{Codex, Claude, Grok} {
+	for _, engine := range []Engine{Codex, Claude, Grok, Antigravity} {
 		if c := Support(engine, Session, Effort); c.Availability != Native {
 			t.Fatalf("%s session effort: %+v", engine, c)
 		}
@@ -238,7 +264,7 @@ func TestOpenAICompatibleSessionClaims(t *testing.T) {
 // produced: natively where the harness states it, composed where the library
 // runs the loop. Nothing else claims it.
 func TestToolActivityClaims(t *testing.T) {
-	for _, e := range []Engine{Codex, Claude, Grok} {
+	for _, e := range []Engine{Codex, Claude, Grok, Antigravity} {
 		if c := Support(e, Session, ToolActivity); c.Availability != Native || c.Reason == "" {
 			t.Errorf("%s session tool activity: %+v", e, c)
 		}
@@ -282,6 +308,14 @@ func TestProvidedSkillsAreOfferedWhereverThereIsAnAgent(t *testing.T) {
 			if c := Support(e, op, ProvidedSkills); !c.Usable() || c.Reason == "" && c.Availability != Native {
 				t.Errorf("%s %s skills: %+v", e, op, c)
 			}
+		}
+	}
+	for _, op := range []Operation{Run, Session} {
+		if c := Support(Antigravity, op, ProvidedSkills); c.Usable() || c.Reason == "" {
+			t.Errorf("Antigravity %s provided skills: %+v", op, c)
+		}
+		if c := Support(Antigravity, op, IncludeGlobalSkills); c.Availability != Native || c.Reason == "" {
+			t.Errorf("Antigravity %s global skills: %+v", op, c)
 		}
 	}
 	if Support(OpenAICompatible, Complete, ProvidedSkills).Availability != Composed {

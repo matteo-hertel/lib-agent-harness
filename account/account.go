@@ -52,7 +52,8 @@ func Inspect(ctx context.Context, p harness.Provider) (harness.AccountReport, er
 	}
 	binary := p.CLI.Binary
 	if binary == "" {
-		binary = string(p.Engine)
+		d, _ := harness.Describe(p.Engine)
+		binary = d.Binary
 	}
 	if _, err := exec.LookPath(binary); err != nil {
 		return report, &Error{Engine: p.Engine, Code: CodeNotInstalled, Family: harness.FailurePreflight}
@@ -60,6 +61,8 @@ func Inspect(ctx context.Context, p harness.Provider) (harness.AccountReport, er
 	switch p.Engine {
 	case harness.Grok:
 		return inspectGrok(ctx, p, binary)
+	case harness.Antigravity:
+		return inspectAntigravity(ctx, p, binary)
 	case harness.Codex, harness.Claude:
 		return inspectSession(ctx, p)
 	}

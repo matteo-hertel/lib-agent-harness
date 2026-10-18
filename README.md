@@ -1,10 +1,10 @@
 # lib-agent-harness
 
 One Go interface for running AI agents and models through any supported
-harness: the Codex, Claude, Grok and Command Code CLIs with their own logins,
-or any OpenAI-compatible HTTP endpoint or gateway. An application written against it
-can let its users choose the AI service behind each kind of invocation.
-Choosing a service changes configuration, not code.
+harness: the Codex, Claude, Grok, Command Code and Antigravity (`agy`) CLIs
+with their own logins, or any OpenAI-compatible HTTP endpoint or gateway. An
+application written against it can let its users choose the AI service behind
+each kind of invocation. Choosing a service changes configuration, not code.
 
 The library launches local CLI binaries with their native login, or calls an
 explicitly configured API endpoint with a caller-supplied credential source.
@@ -24,8 +24,9 @@ deployed CLI versions, and handle unsupported capabilities at runtime.
 The root package `harness` defines what every execution mode shares:
 
 - `Engine`: `harness.Codex`, `harness.Claude`, `harness.Grok`,
-  `harness.CommandCode` (sessions only) or `harness.OpenAICompatible`. Its
-  spelling is stable and safe to persist.
+  `harness.CommandCode` (sessions only), `harness.Antigravity` (`agy`:
+  catalog, account, native runs and sessions) or `harness.OpenAICompatible`.
+  Its spelling is stable and safe to persist.
 - `Provider`: where inference comes from. A CLI engine reads `Provider.CLI`
   (binary and login home); an API engine reads `Provider.API` (base URL,
   dialect, credential source). Setting the other half is refused.
@@ -1685,6 +1686,7 @@ if report.Credits.Known() && report.Credits.Balance != nil {
 | Codex | `account/read` | `account/rateLimits/read` | credit balance, spend control, rate-limit resets |
 | Claude | `initialize.account` | `get_usage` and `rate_limit_event` | spend and extra-usage allowance, in minor currency units |
 | Grok | agent protocol `check_subscription` | unsupported | unsupported |
+| Antigravity | `agy -p=/credits --output-format json` (`tier_name`) | `agy -p=/usage --output-format json` (per-model quota windows) | `agy -p=/credits --output-format json` (`available_credits`) |
 
 A missing CLI is a classified `not_installed` failure. `session.Inspect` remains
 for Codex and Claude and also returns a session's `Capabilities`.
@@ -1747,15 +1749,15 @@ speaks to `claude -p` directly; it does not depend on the Claude SDK.
 
 ## Native runs and transcripts
 
-`native.Run` invokes Codex, Claude or Grok with one `Config` and `Request`
-shape. Use `native.NewStream` to receive typed events and render a common
-readable transcript. Reuse a stream only for sequential resumes of the same
-session. The application decides whether an incomplete report warrants another
-turn; the library does not retry autonomously.
+`native.Run` invokes Codex, Claude, Grok or Antigravity with one `Config` and
+`Request` shape. Use `native.NewStream` to receive typed events and render a
+common readable transcript. Reuse a stream only for sequential resumes of the
+same session. The application decides whether an incomplete report warrants
+another turn; the library does not retry autonomously.
 
 ```go
 result, err := native.Run(ctx, native.Config{
-    Provider: harness.Provider{Engine: harness.Grok}, // or Codex, Claude
+    Provider: harness.Provider{Engine: harness.Grok}, // or Codex, Claude, Antigravity
     Model:    model,
     Grok:     native.GrokOptions{Telemetry: native.GrokTelemetryReduced},
 }, native.Request{Prompt: "Review this change.", WorkDir: workspace, Schema: reportSchema}, nil)
@@ -1770,10 +1772,13 @@ if err != nil {
   workspace, where a workspace-write agent cannot forge it. Codex constrains
   every message to the schema; `harness.Support(e, harness.Run,
   harness.ProgressMessages)` says whether an engine lets the agent write
-  unconstrained progress messages first.
-- Engine-specific execution settings live in `Config.Codex`, `Config.Claude`
-  and `Config.Grok`. Options for another engine, and `Args` that repeat a flag
-  the library manages, are refused.
+  unconstrained progress messages first. Antigravity uses a composed schema
+  footer in the prompt and validates the final JSON response against the
+  schema.
+- Engine-specific execution settings live in `Config.Codex`, `Config.Claude`,
+  `Config.Grok` and `Config.Antigravity` (`PermissionMode`: `"request-review"`,
+  `"accept-edits"`, `"auto"`, or `"plan"`). Options for another engine, and
+  `Args` that repeat a flag the library manages, are refused.
 - Failures are `*native.RunError` values with harness facts. The provider's own
   account of a failed turn is only in `Result.Failure`.
 - A Grok turn that ends with any stop reason other than `end_turn` is a failure.

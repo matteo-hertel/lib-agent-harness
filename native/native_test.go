@@ -611,3 +611,80 @@ func TestClaudeRefusalExplainsTheFailedRun(t *testing.T) {
 		})
 	}
 }
+
+func TestAntigravityRunAndStream(t *testing.T) {
+	var gotArgs []string
+	var events []Event
+	var transcript bytes.Buffer
+	s, err := NewStream(harness.Antigravity, &transcript, StreamOptions{
+		Structured: true,
+		OnEvent:    func(e Event) { events = append(events, e) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := Config{
+		Provider:    harness.Provider{Engine: harness.Antigravity},
+		Model:       "gemini-3-flash",
+		Effort:      "high",
+		Antigravity: AntigravityOptions{PermissionMode: "auto", Sandbox: true, Agent: "coder"},
+		Args:        []string{"--add-dir", "/extra"},
+		RunCommand: func(_ context.Context, args []string, _ string, out, _ io.Writer) error {
+			gotArgs = slices.Clone(args)
+			lines := []string{
+				`{"event":"init","conversation_id":"conv-123","init":{"model":"gemini-3-flash","cwd":"/w","permission_mode":"auto"}}`,
+				`{"event":"step_update","conversation_id":"conv-123","step_update":{"step_index":1,"step_type":"agent_response","state":"ACTIVE","thinking_delta":"plan"}}`,
+				`{"event":"step_update","conversation_id":"conv-123","step_update":{"step_index":2,"step_type":"tool","state":"ACTIVE","tool_name":"view_file","tool_info":{"name":"view_file","parameters":{"AbsolutePath":"/w/a.go"}}}}`,
+				`{"event":"step_update","conversation_id":"conv-123","step_update":{"step_index":2,"step_type":"tool","state":"DONE","tool_name":"view_file","tool_info":{"name":"view_file","parameters":{"AbsolutePath":"/w/a.go"},"output":"package a"}}}`,
+				`{"event":"step_update","conversation_id":"conv-123","step_update":{"step_index":3,"step_type":"agent_response","state":"DONE","text_delta":"{\"ok\":true}"}}`,
+				`{"event":"result","conversation_id":"conv-123","result":{"status":"SUCCESS","response":"{\"ok\":true}","structured_output":{"ok":true},"usage":{"input_tokens":100,"cache_read_tokens":20,"output_tokens":10,"thinking_tokens":5}}}`,
+			}
+			for _, line := range lines {
+				_, _ = io.WriteString(out, line+"\n")
+			}
+			return nil
+		},
+	}
+	result, err := Run(context.Background(), c, Request{Prompt: "-check", ResumeSession: "conv-123", Schema: `{"type":"object"}`}, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantArgs := []string{
+		"-p=-check",
+		"--output-format=stream-json",
+		"--conversation=conv-123",
+		`--json-schema={"type":"object"}`,
+		"--model=gemini-3-flash",
+		"--effort=high",
+		"--mode=auto",
+		"--sandbox",
+		"--agent=coder",
+		"--add-dir", "/extra",
+	}
+	if !reflect.DeepEqual(gotArgs, wantArgs) {
+		t.Fatalf("args:\ngot  %q\nwant %q", gotArgs, wantArgs)
+	}
+	if result.SessionID != "conv-123" || string(result.Report) != `{"ok":true}` {
+		t.Fatalf("result: %+v", result)
+	}
+	wantUsage := harness.Usage{Known: true, Input: 120, CacheRead: 20, Output: 15, Reasoning: 5, CacheKnown: true, ReasoningKnown: true}
+	if result.Usage != wantUsage {
+		t.Fatalf("usage: %+v want %+v", result.Usage, wantUsage)
+	}
+	var kinds []string
+	for _, ev := range events {
+		kinds = append(kinds, ev.Kind)
+	}
+	if !reflect.DeepEqual(kinds, []string{"session", "reasoning", "tool_start", "tool_end", "message", "usage"}) {
+		t.Fatalf("event kinds: %v", kinds)
+	}
+	if events[2].ItemID != "step-2" || events[2].ToolName != "view_file" || string(events[2].Input) != `{"AbsolutePath":"/w/a.go"}` || events[3].Output != "package a" || events[3].Failed {
+		t.Fatalf("tool events: %+v %+v", events[2], events[3])
+	}
+	env := nativeEnvironment(Config{Provider: harness.Provider{Engine: harness.Antigravity}, Env: []string{"PATH=/usr/bin", "ANTIGRAVITY_LS_ADDRESS=127.0.0.1:1", "JETSKI_PORT=2"}})
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "ANTIGRAVITY_") || strings.HasPrefix(entry, "JETSKI_") {
+			t.Fatalf("leaked parent server env: %s", entry)
+		}
+	}
+}

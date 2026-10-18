@@ -94,3 +94,41 @@ func GrokEnvironment(home string) ([]string, string) {
 	}
 	return Override(env, GrokReducedTelemetry...), ""
 }
+
+// AntigravityReducedTelemetry disables agy's self-update check, terminal logo
+// and OSC 7501 progress escape sequences on every non-interactive launch.
+var AntigravityReducedTelemetry = []string{
+	"AGY_CLI_DISABLE_AUTO_UPDATE=1",
+	"AGY_CLI_OSC7501=off",
+	"AGY_CLI_HIDE_LOGO=1",
+}
+
+// AntigravityHomeProblem accepts an empty home or the user's native ~/.gemini
+// directory. agy derives ~/.gemini and ~/.gemini/antigravity-cli from
+// os.UserHomeDir() and reads no variable that moves only its own home.
+func AntigravityHomeProblem(home string) string {
+	if home == "" {
+		return ""
+	}
+	if !filepath.IsAbs(home) || strings.ContainsRune(home, '\x00') {
+		return "antigravity_home_invalid"
+	}
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		return "antigravity_home_unresolved"
+	}
+	if filepath.Clean(home) != filepath.Join(userHome, ".gemini") {
+		return "antigravity_home_unsupported"
+	}
+	return ""
+}
+
+// AntigravityEnvironment is the operating environment with Antigravity's
+// non-interactive settings and without any inherited parent agent server
+// variables (ANTIGRAVITY_LS_ADDRESS, ANTIGRAVITY_CSRF_TOKEN, etc.).
+func AntigravityEnvironment(home string) ([]string, string) {
+	if code := AntigravityHomeProblem(home); code != "" {
+		return nil, code
+	}
+	return Override(Native(), AntigravityReducedTelemetry...), ""
+}

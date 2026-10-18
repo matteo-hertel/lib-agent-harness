@@ -123,6 +123,19 @@ func init() {
 			startTurn: (*Session).startCommandCodeTurn, interrupt: (*Session).interruptACP,
 			composedSteer: "Command Code steering cancels the running prompt and sends another",
 		},
+		harness.Antigravity: {
+			dialect: antigravityDialect, resolveHome: antigravityHome,
+			foreignPolicy:    antigravityForeignPolicy,
+			inspectElsewhere: "inspect an Antigravity login with account.Inspect",
+			args: func(o Options, nativeID string, resuming bool, _ *launch) []string {
+				return antigravityArgs(o, nativeID, resuming)
+			},
+			normalizePolicy: normalizeAntigravityPolicy, withheld: antigravityManaged,
+			refuseAddition: refuseAntigravityAddition, overrides: antigravityOverrides,
+			initialize: (*Session).initializeAntigravity, sessionNotice: (*Session).observeAntigravityInit, event: (*Session).antigravityEvent,
+			startTurn: (*Session).startAntigravityTurn, interrupt: (*Session).interruptAntigravity,
+			steer: (*Session).steerAntigravity,
+		},
 		// The OpenAI-compatible engine runs the library's own loop, with no
 		// process wire; it shares only the turn lifecycle.
 		harness.OpenAICompatible: {

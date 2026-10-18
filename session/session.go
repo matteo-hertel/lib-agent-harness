@@ -57,6 +57,7 @@ type Session struct {
 	commandCodeMode       string
 	commandCodeConfigured bool
 	commandCodeEarly      struct{ session, mode string }
+	antigravityInit       chan antigravityInitState
 	// removeSkillFiles removes the private plugin this launch wrote, once
 	// the session is over.
 	removeSkillFiles func()

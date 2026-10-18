@@ -161,7 +161,10 @@ func TestSkillRequestsANativeRunCannotHonourAreRefused(t *testing.T) {
 		"exclude codex":            {Config{Provider: provider(harness.Codex), Skills: harness.Skills{Global: harness.GlobalSkillsExclude}}, CodeGlobalSkillsUnsupported},
 		"exclude claude":           {Config{Provider: provider(harness.Claude), Skills: harness.Skills{Global: harness.GlobalSkillsExclude, Provided: provided}}, CodeGlobalSkillsUnsupported},
 		"exclude grok":             {Config{Provider: provider(harness.Grok), Skills: harness.Skills{Global: harness.GlobalSkillsExclude}}, CodeGlobalSkillsUnsupported},
+		"exclude antigravity":      {Config{Provider: provider(harness.Antigravity), Skills: harness.Skills{Global: harness.GlobalSkillsExclude}}, CodeGlobalSkillsUnsupported},
+		"provided on antigravity":  {Config{Provider: provider(harness.Antigravity), Skills: harness.Skills{Provided: provided}}, CodeSkillsUnsupported},
 		"include without skills":   {Config{Provider: provider(harness.Claude), Args: []string{"--disable-slash-commands"}, Skills: harness.Skills{Global: harness.GlobalSkillsInclude}}, CodeSkillsConflict},
+		"agy include no slash":     {Config{Provider: provider(harness.Antigravity), Args: []string{"--disable-slash-commands"}, Skills: harness.Skills{Global: harness.GlobalSkillsInclude}}, CodeSkillsConflict},
 		"include without settings": {Config{Provider: provider(harness.Claude), Args: []string{"--setting-sources=project"}, Skills: harness.Skills{Global: harness.GlobalSkillsInclude}}, CodeSkillsConflict},
 		"plugin without Skill":     {Config{Provider: provider(harness.Claude), Args: []string{"--tools=Read"}, Skills: harness.Skills{Provided: provided}}, CodeSkillsConflict},
 		"plugin in safe mode":      {Config{Provider: provider(harness.Claude), Args: []string{"--safe-mode"}, Skills: harness.Skills{Provided: provided}}, CodeSkillsConflict},
@@ -179,7 +182,7 @@ func TestSkillRequestsANativeRunCannotHonourAreRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Default and Include are each engine's own behaviour.
-	for _, engine := range []harness.Engine{harness.Codex, harness.Claude, harness.Grok} {
+	for _, engine := range []harness.Engine{harness.Codex, harness.Claude, harness.Grok, harness.Antigravity} {
 		if err := validate(Config{Provider: provider(engine), Skills: harness.Skills{Global: harness.GlobalSkillsInclude}}, Request{Prompt: "p"}); err != nil {
 			t.Errorf("%s include: %v", engine, err)
 		}

@@ -98,17 +98,22 @@ func supported(o Options) error {
 	return unsupportedMode(o)
 }
 
-// unsupportedMode refuses a restricted or sandboxed Grok or Command Code
-// session, and Command Code instructions and provided skills, with the
-// capability's own reason. Codex and Claude refuse these on their own terms,
-// including on a platform without containment.
+// unsupportedMode refuses a restricted or sandboxed Grok, Command Code or
+// Antigravity session, and Command Code or Antigravity instructions and
+// provided skills, with the capability's own reason. Codex and Claude refuse
+// these on their own terms, including on a platform without containment.
 func unsupportedMode(o Options) error {
 	engine := o.Provider.Engine
-	if engine != harness.Grok && engine != harness.CommandCode {
+	if engine != harness.Grok && engine != harness.CommandCode && engine != harness.Antigravity {
 		return nil
 	}
 	if engine == harness.CommandCode {
 		if err := unsupportedCommandCode(o); err != nil {
+			return err
+		}
+	}
+	if engine == harness.Antigravity {
+		if err := unsupportedAntigravity(o); err != nil {
 			return err
 		}
 	}
@@ -131,6 +136,9 @@ func unsupportedMode(o Options) error {
 func otherEnginePolicy(o Options) error {
 	if o.Policy.CommandCodePermission != "" && o.Provider.Engine != harness.CommandCode {
 		return refuse(o, "policy", RefusedOtherEnginePolicy, "only Command Code reads Policy.CommandCodePermission; leave it unset")
+	}
+	if o.Policy.AntigravityPermission != "" && o.Provider.Engine != harness.Antigravity {
+		return refuse(o, "policy", RefusedOtherEnginePolicy, "only Antigravity reads Policy.AntigravityPermission; leave it unset")
 	}
 	if foreign := engines[o.Provider.Engine].foreignPolicy; foreign != nil {
 		return foreign(o)

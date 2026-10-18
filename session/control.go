@@ -191,6 +191,15 @@ func (s *Session) Interrupt(ctx context.Context, expectedTurnID string) error {
 }
 
 func (s *Session) interrupt(ctx context.Context, expected string) error {
+	if !harness.Support(s.options.Provider.Engine, harness.Session, harness.Interrupt).Usable() {
+		s.mu.Lock()
+		closed := s.closed
+		s.mu.Unlock()
+		if closed {
+			return ErrClosed
+		}
+		return s.notOffered("interrupt", func(c Capabilities) harness.Capability { return c.Interrupt })
+	}
 	t, err := s.activeTurn(expected)
 	if err != nil {
 		return err
@@ -277,6 +286,15 @@ func (s *Session) Steer(ctx context.Context, expected string, in Input, o SteerO
 		return SteerResult{}, err
 	}
 	defer s.unlockOp()
+	if !harness.Support(s.options.Provider.Engine, harness.Session, harness.Steer).Usable() {
+		s.mu.Lock()
+		closed := s.closed
+		s.mu.Unlock()
+		if closed {
+			return SteerResult{}, ErrClosed
+		}
+		return SteerResult{}, s.notOffered("steer", func(c Capabilities) harness.Capability { return c.Steer })
+	}
 	t, err := s.activeTurn(expected)
 	if err != nil {
 		return SteerResult{}, err

@@ -24,6 +24,7 @@ var descriptors = map[Engine]Descriptor{
 	Claude:           {Engine: Claude, Label: "Claude", Transport: CLITransport, Binary: "claude", HomeVariable: "CLAUDE_CONFIG_DIR", HomeDir: ".claude"},
 	Grok:             {Engine: Grok, Label: "Grok", Transport: CLITransport, Binary: "grok", HomeVariable: "GROK_HOME", HomeDir: ".grok"},
 	CommandCode:      {Engine: CommandCode, Label: "Command Code", Transport: CLITransport, Binary: "cmd", HomeDir: ".commandcode"},
+	Antigravity:      {Engine: Antigravity, Label: "Antigravity", Transport: CLITransport, Binary: "agy", HomeDir: ".gemini"},
 	OpenAICompatible: {Engine: OpenAICompatible, Label: "OpenAI-compatible API", Transport: APITransport},
 }
 

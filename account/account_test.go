@@ -20,12 +20,19 @@ import (
 
 // Verified wire data, with identifiers replaced.
 const (
-	codexAccountFixture     = `{"account":{"type":"chatgpt","email":"fixture@example.test","planType":"prolite"},"requiresOpenaiAuth":true}`
-	codexRateLimitsFixture  = `{"ordinaryUsageAllowed":true,"rateLimits":{"limitId":"codex","limitName":null,"normalModelSlug":null,"primary":{"usedPercent":2,"windowDurationMins":10080,"resetsAt":1791113081},"secondary":null,"credits":{"hasCredits":false,"unlimited":false,"balance":"0"},"individualLimit":null,"spendControlReached":false,"planType":"prolite","rateLimitReachedType":null},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":2,"windowDurationMins":10080,"resetsAt":1791113081},"secondary":null,"credits":{"hasCredits":false,"unlimited":false,"balance":"0"},"spendControlReached":false,"rateLimitReachedType":null}},"rateLimitResetCredits":{"availableCount":2,"credits":[{"id":"fixture-credit","resetType":"codexRateLimits","status":"available","grantedAt":1788582130,"expiresAt":1791174130,"title":"Full reset","description":"must-not-escape"}]},"accountId":"fixture-account","rateLimitUpsell":null}`
-	claudeInitFixture       = `{"account":{"email":"fixture@example.test","subscriptionType":"max","apiProvider":"firstParty"}}`
-	claudeUsageFixture      = `{"session":{"total_cost_usd":0},"subscription_type":"max","rate_limits_available":true,"rate_limits":{"five_hour":{"utilization":11,"resets_at":"2026-09-27T19:59:59.718097+00:00","limit_dollars":null,"used_dollars":null,"remaining_dollars":null,"locked_reason":null},"seven_day":{"utilization":3,"resets_at":"2026-10-04T14:59:59.718121+00:00","limit_dollars":null,"used_dollars":null,"remaining_dollars":null,"locked_reason":null},"seven_day_opus":null,"iguana_necktie":{"utilization":0,"resets_at":"2026-11-05T07:59:00+00:00","limit_dollars":250,"used_dollars":0,"remaining_dollars":250,"locked_reason":null},"extra_usage":{"is_enabled":false,"monthly_limit":3750,"used_credits":251,"utilization":6.69,"currency":"GBP","decimal_places":2,"disabled_reason":"out_of_credits","user_disabled":false,"spend_limit_reached":false,"credits_ever_enabled":true,"daily":null,"weekly":null}},"limits":[{"kind":"session","group":"session","percent":11,"severity":"normal","resets_at":"2026-09-27T19:59:59.718097+00:00","scope":null,"is_active":true},{"kind":"weekly_all","group":"weekly","percent":3,"severity":"normal","resets_at":"2026-10-04T14:59:59.718121+00:00","scope":null,"is_active":false},{"kind":"weekly_scoped","group":"weekly","percent":0,"severity":"normal","resets_at":"2026-10-04T15:00:00+00:00","scope":{"model":{"id":null,"display_name":"Fable"},"surface":null},"is_active":false}],"spend":{"used":{"amount_minor":251,"currency":"GBP","exponent":2},"limit":{"amount_minor":3750,"currency":"GBP","exponent":2},"percent":7,"severity":"normal","enabled":false,"disabled_reason":"out_of_credits","cap":{"money":{"amount_minor":3750,"currency":"GBP","exponent":2},"credits":null},"balance":null,"auto_reload":null,"can_purchase_credits":false,"can_toggle":false}}`
-	grokSubscriptionFixture = `{"authenticated":true,"meta":{"email":"fixture@example.test","auth_mode":"Oidc","team_id":"fixture-team","team_name":null,"is_zdr":false,"team_role":null,"coding_data_retention_opt_out":true,"show_resolved_model":false,"gate":null,"subscription_tier":"Free","feedback_trace_offer":false,"backend_billed":false}}`
+	codexAccountFixture       = `{"account":{"type":"chatgpt","email":"fixture@example.test","planType":"prolite"},"requiresOpenaiAuth":true}`
+	codexRateLimitsFixture    = `{"ordinaryUsageAllowed":true,"rateLimits":{"limitId":"codex","limitName":null,"normalModelSlug":null,"primary":{"usedPercent":2,"windowDurationMins":10080,"resetsAt":1791113081},"secondary":null,"credits":{"hasCredits":false,"unlimited":false,"balance":"0"},"individualLimit":null,"spendControlReached":false,"planType":"prolite","rateLimitReachedType":null},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":2,"windowDurationMins":10080,"resetsAt":1791113081},"secondary":null,"credits":{"hasCredits":false,"unlimited":false,"balance":"0"},"spendControlReached":false,"rateLimitReachedType":null}},"rateLimitResetCredits":{"availableCount":2,"credits":[{"id":"fixture-credit","resetType":"codexRateLimits","status":"available","grantedAt":1788582130,"expiresAt":1791174130,"title":"Full reset","description":"must-not-escape"}]},"accountId":"fixture-account","rateLimitUpsell":null}`
+	claudeInitFixture         = `{"account":{"email":"fixture@example.test","subscriptionType":"max","apiProvider":"firstParty"}}`
+	claudeUsageFixture        = `{"session":{"total_cost_usd":0},"subscription_type":"max","rate_limits_available":true,"rate_limits":{"five_hour":{"utilization":11,"resets_at":"2026-09-27T19:59:59.718097+00:00","limit_dollars":null,"used_dollars":null,"remaining_dollars":null,"locked_reason":null},"seven_day":{"utilization":3,"resets_at":"2026-10-04T14:59:59.718121+00:00","limit_dollars":null,"used_dollars":null,"remaining_dollars":null,"locked_reason":null},"seven_day_opus":null,"iguana_necktie":{"utilization":0,"resets_at":"2026-11-05T07:59:00+00:00","limit_dollars":250,"used_dollars":0,"remaining_dollars":250,"locked_reason":null},"extra_usage":{"is_enabled":false,"monthly_limit":3750,"used_credits":251,"utilization":6.69,"currency":"GBP","decimal_places":2,"disabled_reason":"out_of_credits","user_disabled":false,"spend_limit_reached":false,"credits_ever_enabled":true,"daily":null,"weekly":null}},"limits":[{"kind":"session","group":"session","percent":11,"severity":"normal","resets_at":"2026-09-27T19:59:59.718097+00:00","scope":null,"is_active":true},{"kind":"weekly_all","group":"weekly","percent":3,"severity":"normal","resets_at":"2026-10-04T14:59:59.718121+00:00","scope":null,"is_active":false},{"kind":"weekly_scoped","group":"weekly","percent":0,"severity":"normal","resets_at":"2026-10-04T15:00:00+00:00","scope":{"model":{"id":null,"display_name":"Fable"},"surface":null},"is_active":false}],"spend":{"used":{"amount_minor":251,"currency":"GBP","exponent":2},"limit":{"amount_minor":3750,"currency":"GBP","exponent":2},"percent":7,"severity":"normal","enabled":false,"disabled_reason":"out_of_credits","cap":{"money":{"amount_minor":3750,"currency":"GBP","exponent":2},"credits":null},"balance":null,"auto_reload":null,"can_purchase_credits":false,"can_toggle":false}}`
+	grokSubscriptionFixture   = `{"authenticated":true,"meta":{"email":"fixture@example.test","auth_mode":"Oidc","team_id":"fixture-team","team_name":null,"is_zdr":false,"team_role":null,"coding_data_retention_opt_out":true,"show_resolved_model":false,"gate":null,"subscription_tier":"Free","feedback_trace_offer":false,"backend_billed":false}}`
+	antigravityCreditsFixture = `{"status":"SUCCESS","command":{"name":"credits","description":"must-not-escape","data":{"remaining_credits":2500,"plan_name":"Google AI Ultra","upgrade_uri":"https://one.google.com/ai"}}}`
+	antigravityUsageFixture   = `{"status":"SUCCESS","command":{"name":"usage","description":"must-not-escape","data":{"groups":[{"buckets":[{"id":"fixture-bucket","name":"Claude and GPT-OSS","description":"must-not-escape","window":"5h","disabled":false,"remaining_fraction":0.75,"remaining_amount":"75%","reset_time":"2026-04-18T14:27:25Z"},{"id":"fixture-disabled","name":"Claude and GPT-OSS","window":"weekly","disabled":true}]},{"buckets":[{"id":"fixture-weekly","name":"Gemini 3.1 Pro","window":"weekly","disabled":false,"remaining_fraction":0.9,"remaining_amount":"90%","reset_time":"2026-04-25T00:00:00Z"}]}]}}}`
 )
+
+func isAntigravityAccountArgs(args []string) bool {
+	return slices.Equal(args, []string{"-p=/credits", "--output-format", "json"}) ||
+		slices.Equal(args, []string{"-p=/usage", "--output-format", "json"})
+}
 
 // The test binary doubles as each CLI, speaking only the inspection protocol.
 // Any other method, including Grok's session/new, ends it with a failure.
@@ -34,7 +41,7 @@ const (
 // never reach it: its fixture is recognized by its argv, which no go test
 // command line contains, and reads its mode from the home it was given.
 func init() {
-	if os.Getenv("LIB_HARNESS_ACCOUNT_FIXTURE") != "1" && !slices.Equal(os.Args[1:], []string{"agent", "--no-leader", "stdio"}) {
+	if os.Getenv("LIB_HARNESS_ACCOUNT_FIXTURE") != "1" && !slices.Equal(os.Args[1:], []string{"agent", "--no-leader", "stdio"}) && !isAntigravityAccountArgs(os.Args[1:]) {
 		return
 	}
 	os.Exit(fixture())
@@ -45,6 +52,8 @@ func fixture() int {
 	switch {
 	case slices.Equal(args, []string{"agent", "--no-leader", "stdio"}):
 		return grokFixture()
+	case isAntigravityAccountArgs(args):
+		return antigravityFixture(args[0])
 	case slices.Contains(args, "app-server"):
 		return sessionFixture(harness.Codex)
 	case slices.Contains(args, "--safe-mode"):
@@ -386,4 +395,142 @@ func TestSessionFailuresBecomeAccountFacts(t *testing.T) {
 			}
 		})
 	}
+}
+
+func antigravityFixture(flag string) int {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return 10
+	}
+	if os.Getenv("XAI_API_KEY") != "" || os.Getenv("LIB_HARNESS_ACCOUNT_FIXTURE") != "" || os.Getenv("ANTIGRAVITY_LS_ADDRESS") != "" {
+		return 14
+	}
+	for _, entry := range nativecli.AntigravityReducedTelemetry {
+		key, value, _ := strings.Cut(entry, "=")
+		if os.Getenv(key) != value {
+			return 11
+		}
+	}
+	if cwd, _ := os.Getwd(); !strings.Contains(cwd, "agent-harness-account-") {
+		return 12
+	}
+	written, _ := os.ReadFile(filepath.Join(home, "mode"))
+	mode := string(written)
+	if mode == "exit" {
+		return 3
+	}
+	commands, err := os.OpenFile(filepath.Join(home, "commands"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return 13
+	}
+	fmt.Fprintln(commands, flag)
+	_ = commands.Close()
+
+	switch mode {
+	case "hang":
+		_ = os.WriteFile(filepath.Join(home, "waiting"), nil, 0o600)
+		time.Sleep(time.Minute)
+		return 15
+	case "unsupported":
+		fmt.Println(`{"status":"ERROR","error":{"message":"Unknown command /credits: must-not-escape"}}`)
+	case "rejected":
+		fmt.Println(`{"status":"ERROR","error":{"message":"backend failure must-not-escape"}}`)
+	case "malformed":
+		fmt.Println(`{"status":"SUCCESS","command":{"name":"other","data":{}}}`)
+	case "logged_out":
+		fmt.Println(`{"status":"ERROR","error":{"message":"Not logged in; run agy auth login"}}`)
+	default:
+		if flag == "-p=/credits" {
+			fmt.Println(antigravityCreditsFixture)
+		} else {
+			fmt.Println(antigravityUsageFixture)
+		}
+	}
+	return 0
+}
+
+func antigravityFixtureProvider(t *testing.T, mode string) (harness.Provider, string) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XAI_API_KEY", "synthetic-key-must-not-reach-agy")
+	t.Setenv("ANTIGRAVITY_LS_ADDRESS", "127.0.0.1:9999")
+	if err := os.WriteFile(filepath.Join(home, "mode"), []byte(mode), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bin, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return harness.Provider{Engine: harness.Antigravity, CLI: harness.CLI{Binary: bin}}, home
+}
+
+func TestAntigravityInspect(t *testing.T) {
+	p, home := antigravityFixtureProvider(t, "")
+	report, err := Inspect(testContext(t), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Engine != harness.Antigravity || !report.Account.Known() || report.Account.LoggedIn == nil || !*report.Account.LoggedIn || report.Account.Plan != "Google AI Ultra" {
+		t.Fatalf("account: %+v", report.Account)
+	}
+	if !report.Credits.Known() || report.Credits.Balance == nil || report.Credits.Balance.Value != "2500" || report.Credits.Balance.Unit != "credits" {
+		t.Fatalf("credits: %+v", report.Credits)
+	}
+	if !report.Quota.Known() || len(report.Quota.Windows) != 2 {
+		t.Fatalf("quota: %+v", report.Quota)
+	}
+	w0, w1 := report.Quota.Windows[0], report.Quota.Windows[1]
+	if w0.Kind != harness.QuotaSession || w0.Model != "Claude and GPT-OSS" || w0.WindowMinutes == nil || *w0.WindowMinutes != 300 || w0.UsedPercent == nil || *w0.UsedPercent != 25 || w0.ResetsAt == nil {
+		t.Fatalf("session window: %+v", w0)
+	}
+	if w1.Kind != harness.QuotaWeeklyModel || w1.Model != "Gemini 3.1 Pro" || w1.WindowMinutes == nil || *w1.WindowMinutes != 10080 || w1.UsedPercent == nil || *w1.UsedPercent != 10 || w1.ResetsAt == nil {
+		t.Fatalf("weekly window: %+v", w1)
+	}
+	commands, err := os.ReadFile(filepath.Join(home, "commands"))
+	if err != nil || string(commands) != "-p=/credits\n-p=/usage\n" {
+		t.Fatalf("commands: %q %v", commands, err)
+	}
+	raw, _ := json.Marshal(report)
+	if strings.Contains(string(raw), "must-not-escape") || strings.Contains(string(raw), "fixture-bucket") {
+		t.Fatal("provider text escaped")
+	}
+}
+
+func TestAntigravityLoggedOut(t *testing.T) {
+	p, home := antigravityFixtureProvider(t, "logged_out")
+	report, err := Inspect(testContext(t), p)
+	if err != nil || !report.Account.Known() || report.Account.LoggedIn == nil || *report.Account.LoggedIn {
+		t.Fatalf("logged out: %+v %v", report, err)
+	}
+	if report.Quota.Known() || report.Quota.Reason == "" || report.Credits.Known() || report.Credits.Reason == "" {
+		t.Fatalf("logged out quota/credits: %+v", report)
+	}
+	commands, _ := os.ReadFile(filepath.Join(home, "commands"))
+	if string(commands) != "-p=/credits\n" {
+		t.Fatalf("logged out should not run /usage: %q", commands)
+	}
+}
+
+func TestAntigravityFailuresAreTyped(t *testing.T) {
+	for mode, want := range map[string]harness.Facts{
+		"unsupported": {Engine: harness.Antigravity, Operation: harness.Account, Family: harness.FailureCapability, Code: CodeMethodUnavailable},
+		"rejected":    {Engine: harness.Antigravity, Operation: harness.Account, Family: harness.FailureRequest, Cause: harness.CauseUnknown, Code: CodeRejected},
+		"malformed":   {Engine: harness.Antigravity, Operation: harness.Account, Family: harness.FailureRequest, Code: CodeInvalidResponse},
+		"exit":        {Engine: harness.Antigravity, Operation: harness.Account, Family: harness.FailureProcess, Code: CodeProcessExited, Retryable: true},
+	} {
+		t.Run(mode, func(t *testing.T) {
+			p, _ := antigravityFixtureProvider(t, mode)
+			report, err := Inspect(testContext(t), p)
+			requireFacts(t, err, want)
+			if report.Account.Known() || report.Account.Reason == "" {
+				t.Fatalf("failed inspection reported an account: %+v", report.Account)
+			}
+		})
+	}
+	p, _ := antigravityFixtureProvider(t, "")
+	p.CLI.Home = t.TempDir()
+	_, err := Inspect(testContext(t), p)
+	requireFacts(t, err, harness.Facts{Engine: harness.Antigravity, Operation: harness.Account, Family: harness.FailureCapability, Code: "antigravity_home_unsupported"})
 }

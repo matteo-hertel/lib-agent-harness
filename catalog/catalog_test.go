@@ -145,17 +145,19 @@ func TestDiscoveryDistinguishesTheCallersDeadline(t *testing.T) {
 }
 
 func TestDiscoveryRefusesAMissingExecutable(t *testing.T) {
-	for _, engine := range []harness.Engine{harness.Codex, harness.Claude, harness.Grok} {
-		_, err := Discover(context.Background(), cliProvider(engine, "/secret/missing/"+string(engine), t.TempDir()))
+	for _, engine := range []harness.Engine{harness.Codex, harness.Claude, harness.Grok, harness.Antigravity} {
+		_, err := Discover(context.Background(), cliProvider(engine, "/secret/missing/"+string(engine), ""))
 		requireFailure(t, err, engine, harness.FailurePreflight, "executable_not_found")
 	}
 }
 
 func TestDiscoveryRefusesARelativeHome(t *testing.T) {
-	for engine, code := range map[harness.Engine]string{harness.Codex: "codex_home_invalid", harness.Claude: "claude_home_invalid", harness.Grok: "grok_home_invalid"} {
+	for engine, code := range map[harness.Engine]string{harness.Codex: "codex_home_invalid", harness.Claude: "claude_home_invalid", harness.Grok: "grok_home_invalid", harness.Antigravity: "antigravity_home_invalid"} {
 		_, err := Discover(context.Background(), cliProvider(engine, testBinary(t), "secret-relative"))
 		requireFailure(t, err, engine, harness.FailurePreflight, code)
 	}
+	_, err := Discover(context.Background(), cliProvider(harness.Antigravity, testBinary(t), t.TempDir()))
+	requireFailure(t, err, harness.Antigravity, harness.FailureCapability, "antigravity_home_unsupported")
 }
 
 func TestCatalogSizeIsBounded(t *testing.T) {

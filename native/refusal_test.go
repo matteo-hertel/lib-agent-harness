@@ -86,6 +86,9 @@ func TestOptionsForAnotherEngineAreRefused(t *testing.T) {
 		"grok tools on claude":      {Provider: provider(harness.Claude), Grok: GrokOptions{Tools: []string{"read"}}},
 		"grok sandbox on codex":     {Provider: provider(harness.Codex), Grok: GrokOptions{Sandbox: "strict"}},
 		"grok permission on claude": {Provider: provider(harness.Claude), Grok: GrokOptions{PermissionMode: "auto"}},
+		"agy mode on codex":         {Provider: provider(harness.Codex), Antigravity: AntigravityOptions{PermissionMode: "auto"}},
+		"agy sandbox on claude":     {Provider: provider(harness.Claude), Antigravity: AntigravityOptions{Sandbox: true}},
+		"codex sandbox on agy":      {Provider: provider(harness.Antigravity), Codex: CodexOptions{Sandbox: "read-only"}},
 	} {
 		if facts := refusal(t, c, Request{Prompt: "p"}); facts.Code != CodeOptionForOtherEngine || facts.Engine != c.Provider.Engine {
 			t.Errorf("%s: %+v", name, facts)
@@ -107,6 +110,9 @@ func TestOptionsAnEngineCannotHonourAreRefused(t *testing.T) {
 		"invalid schema":       {Config{Provider: provider(harness.Claude)}, Request{Schema: "{"}, CodeInvalidSchema},
 		"invalid codex schema": {Config{Provider: provider(harness.Codex)}, Request{Schema: "not json"}, CodeInvalidSchema},
 		"grok browser":         {Config{Provider: provider(harness.Grok), Browser: true}, Request{}, CodeUnsupportedOption},
+		"agy browser":          {Config{Provider: provider(harness.Antigravity), Browser: true}, Request{}, CodeUnsupportedOption},
+		"agy instructions":     {Config{Provider: provider(harness.Antigravity)}, Request{AppendInstructions: "extra"}, CodeUnsupportedOption},
+		"agy custom home":      {Config{Provider: harness.Provider{Engine: harness.Antigravity, CLI: harness.CLI{Home: t.TempDir()}}}, Request{}, "antigravity_home_unsupported"},
 	} {
 		if facts := refusal(t, tc.c, tc.r); facts.Code != tc.code {
 			t.Errorf("%s: %+v", name, facts)
@@ -134,6 +140,11 @@ func TestManagedFlagsInArgsAreRefused(t *testing.T) {
 			{"--permission-mode=bypassPermissions"}, {"--resume=s"}, {"-r", "s"}, {"--cwd=/"}, {"--model=m"}, {"-m", "m"},
 			{"--reasoning-effort=high"}, {"--effort=high"}, {"--rules=x"},
 		},
+		harness.Antigravity: {
+			{"--print=x"}, {"-p", "x"}, {"--output-format=json"}, {"--input-format=stream-json"}, {"--json-schema={}"},
+			{"--model=m"}, {"-m", "m"}, {"--effort=high"}, {"--mode=auto"}, {"--dangerously-skip-permissions"},
+			{"--sandbox"}, {"--agent=a"}, {"--conversation=s"}, {"-c", "s"}, {"--"},
+		},
 	}
 	for engine, cases := range refused {
 		for _, args := range cases {
@@ -144,9 +155,10 @@ func TestManagedFlagsInArgsAreRefused(t *testing.T) {
 	}
 
 	allowed := map[harness.Engine][][]string{
-		harness.Codex:  {{"--add-dir", "/extra"}, {"-c", "features.web_search=true"}, {"--config=shell_environment_policy.inherit=all"}, {"--ephemeral"}, {"--color", "never"}},
-		harness.Claude: {{"--add-dir", "/extra"}, {"--disallowedTools", "WebFetch"}, {"--verbose"}, {"--fallback-model", "sonnet"}},
-		harness.Grok:   {{"--no-subagents"}, {"-s", "00000000-0000-0000-0000-000000000000"}, {"--max-turns=3"}, {"--disable-web-search"}},
+		harness.Codex:       {{"--add-dir", "/extra"}, {"-c", "features.web_search=true"}, {"--config=shell_environment_policy.inherit=all"}, {"--ephemeral"}, {"--color", "never"}},
+		harness.Claude:      {{"--add-dir", "/extra"}, {"--disallowedTools", "WebFetch"}, {"--verbose"}, {"--fallback-model", "sonnet"}},
+		harness.Grok:        {{"--no-subagents"}, {"-s", "00000000-0000-0000-0000-000000000000"}, {"--max-turns=3"}, {"--disable-web-search"}},
+		harness.Antigravity: {{"--add-dir", "/extra"}, {"--disable-slash-commands"}},
 	}
 	for engine, cases := range allowed {
 		for _, args := range cases {
@@ -177,11 +189,12 @@ func TestStreamMustMatchTheInvocation(t *testing.T) {
 
 func TestRunErrorsCarryNoProviderText(t *testing.T) {
 	secret := "provider-secret-diagnostic"
-	for _, engine := range []harness.Engine{harness.Codex, harness.Claude, harness.Grok} {
+	for _, engine := range []harness.Engine{harness.Codex, harness.Claude, harness.Grok, harness.Antigravity} {
 		wire := map[harness.Engine]string{
-			harness.Codex:  `{"type":"turn.failed","error":{"message":"` + secret + `"}}`,
-			harness.Claude: `{"type":"result","is_error":true,"result":"` + secret + `"}`,
-			harness.Grok:   `{"type":"error","message":"` + secret + `"}` + "\n" + `{"type":"end","stopReason":"end_turn"}`,
+			harness.Codex:       `{"type":"turn.failed","error":{"message":"` + secret + `"}}`,
+			harness.Claude:      `{"type":"result","is_error":true,"result":"` + secret + `"}`,
+			harness.Grok:        `{"type":"error","message":"` + secret + `"}` + "\n" + `{"type":"end","stopReason":"end_turn"}`,
+			harness.Antigravity: `{"event":"result","result":{"status":"ERROR","error":{"message":"` + secret + `"}}}` + "\n",
 		}[engine]
 		c := Config{Provider: provider(engine), RunCommand: func(_ context.Context, _ []string, _ string, out, _ io.Writer) error {
 			_, _ = io.WriteString(out, wire)
@@ -198,9 +211,9 @@ func TestRunErrorsCarryNoProviderText(t *testing.T) {
 	}
 }
 
-// Codex counts cached input inside input_tokens; Claude and Grok report it
-// beside. The shared Usage.Input counts every prompt token either way, and an
-// absent Codex cache figure is unknown, not zero.
+// Codex counts cached input inside input_tokens; Claude, Grok and Antigravity
+// report it beside. The shared Usage.Input counts every prompt token either
+// way, and an absent Codex cache figure is unknown, not zero.
 func TestCacheMapsOntoTheSharedInput(t *testing.T) {
 	for name, tc := range map[string]struct {
 		engine harness.Engine
@@ -216,6 +229,8 @@ func TestCacheMapsOntoTheSharedInput(t *testing.T) {
 			harness.Usage{Known: true, Input: 42500, CacheRead: 30000, CacheWrite: 500, Output: 800, CacheKnown: true}, 12000},
 		"grok": {harness.Grok, `{"type":"end","stopReason":"end_turn","usage":{"input_tokens":10,"cache_read_input_tokens":5,"cache_creation_input_tokens":2,"output_tokens":3,"reasoning_tokens":1}}`,
 			harness.Usage{Known: true, Input: 17, CacheRead: 5, CacheWrite: 2, Output: 3, Reasoning: 1, CacheKnown: true, ReasoningKnown: true}, 10},
+		"antigravity": {harness.Antigravity, `{"event":"result","result":{"status":"SUCCESS","response":"ok","usage":{"input_tokens":10,"cache_read_tokens":5,"output_tokens":3,"thinking_tokens":2}}}`,
+			harness.Usage{Known: true, Input: 15, CacheRead: 5, Output: 5, Reasoning: 2, CacheKnown: true, ReasoningKnown: true}, 10},
 	} {
 		s, _ := NewStream(tc.engine, nil, StreamOptions{})
 		s.UserPrompt("p")
