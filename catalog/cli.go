@@ -48,7 +48,8 @@ var cliEngines = map[harness.Engine]cliEngine{
 		return append(nativecli.ClaudeRestrictedArgs(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose")
 	}, nativecli.ClaudeEnvironment, readClaudeCatalog},
 	// --no-leader keeps this process from serving other Grok clients.
-	harness.Grok: {func() []string { return []string{"agent", "--no-leader", "stdio"} }, nativecli.GrokEnvironment, readGrokCatalog},
+	harness.Grok:        {func() []string { return []string{"agent", "--no-leader", "stdio"} }, nativecli.GrokEnvironment, readGrokCatalog},
+	harness.Antigravity: {func() []string { return []string{"--output-format", "json", "models"} }, nativecli.AntigravityEnvironment, readAntigravityCatalog},
 }
 
 // codexArgs creates no thread, and disables tool-discovery features during
@@ -82,7 +83,8 @@ func cliCatalog(p harness.Provider) (invocation, catalogReader, error) {
 func resolveBinary(configured string, engine harness.Engine) (string, error) {
 	bin := configured
 	if bin == "" {
-		bin = string(engine)
+		d, _ := harness.Describe(engine)
+		bin = d.Binary
 	}
 	bin, err := exec.LookPath(bin)
 	if errors.Is(err, os.ErrPermission) {

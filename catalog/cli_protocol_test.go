@@ -259,3 +259,64 @@ func TestCodexWindowsComeFromTheBundledCatalog(t *testing.T) {
 		})
 	}
 }
+
+const antigravityCatalogFixture = `{
+  "status": "SUCCESS",
+  "command": {
+    "name": "models",
+    "description": "secret-description",
+    "data": {
+      "models": [
+        {"id": "claude-opus-4-6-thinking", "label": "Claude Opus 4.6 (Thinking)"},
+        {"id": "gemini-3.1-pro-high", "label": "Gemini 3.1 Pro (High)"},
+        {"id": "gemini-3-flash"},
+        {"id": "claude-opus-4-6-thinking", "label": "Duplicate"}
+      ]
+    }
+  }
+}`
+
+func TestAntigravityCatalogMapsModelsOutput(t *testing.T) {
+	var written strings.Builder
+	var command invocation
+	models, err := testDiscoverer(fakeRunner(antigravityCatalogFixture, &command, &written)).discover(context.Background(), cliProvider(harness.Antigravity, testBinary(t), ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Model{
+		{ID: "claude-opus-4-6-thinking", Name: "Claude Opus 4.6 (Thinking)"},
+		{ID: "gemini-3.1-pro-high", Name: "Gemini 3.1 Pro (High)"},
+		{ID: "gemini-3-flash", Name: "gemini-3-flash"},
+	}
+	if !reflect.DeepEqual(models, want) {
+		t.Fatalf("%+v", models)
+	}
+	if written.Len() != 0 {
+		t.Fatalf("unexpected stdin write: %q", written.String())
+	}
+	if !reflect.DeepEqual(command.args, []string{"--output-format", "json", "models"}) {
+		t.Fatalf("args: %v", command.args)
+	}
+	for _, entry := range []string{"AGY_CLI_DISABLE_AUTO_UPDATE=1", "AGY_CLI_OSC7501=off", "AGY_CLI_HIDE_LOGO=1"} {
+		if !contains(command.env, entry) {
+			t.Fatalf("environment lacks %s: %v", entry, command.env)
+		}
+	}
+	encoded, _ := json.Marshal(models)
+	if strings.Contains(string(encoded), "secret") {
+		t.Fatal("non-model metadata leaked")
+	}
+}
+
+func TestAntigravityCatalogFailsClosed(t *testing.T) {
+	for code, input := range map[string]string{
+		"request_failed":   `{"status":"ERROR","error":{"message":"secret"}}`,
+		"invalid_catalog":  `{"status":"SUCCESS","command":{"name":"version","data":{}}}`,
+		"invalid_response": "secret",
+		"missing_response": " \n ",
+		"output_limit":     strings.Repeat("x", outputLimit+1),
+	} {
+		_, err := testDiscoverer(fakeRunner(input, nil, nil)).discover(context.Background(), cliProvider(harness.Antigravity, testBinary(t), ""))
+		requireFailure(t, err, harness.Antigravity, harness.FailureRequest, code)
+	}
+}

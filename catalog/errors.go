@@ -87,7 +87,11 @@ func refusal(engine harness.Engine, code string) *Error {
 }
 
 func preflightFailure(code string) *Error {
-	return &Error{Family: harness.FailurePreflight, Cause: harness.CauseUnknown, Phase: PhasePreflight, Code: code}
+	family := harness.FailurePreflight
+	if code == "antigravity_home_unsupported" {
+		family = harness.FailureCapability
+	}
+	return &Error{Family: family, Cause: harness.CauseUnknown, Phase: PhasePreflight, Code: code}
 }
 
 func responseFailure(code string) *Error {

@@ -32,12 +32,13 @@ type Config struct {
 	// Nil runs the Provider's CLI. It must stream output and honor context cancellation.
 	RunCommand func(context.Context, []string, string, io.Writer, io.Writer) error
 	// Provider's CLI half locates the harness; an API provider is refused.
-	Provider harness.Provider
-	Model    string
-	Effort   string
-	Codex    CodexOptions
-	Claude   ClaudeOptions
-	Grok     GrokOptions
+	Provider    harness.Provider
+	Model       string
+	Effort      string
+	Codex       CodexOptions
+	Claude      ClaudeOptions
+	Grok        GrokOptions
+	Antigravity AntigravityOptions
 	// Skills are made available for this run (see skills.go): natively by a
 	// private plugin for Claude, and as an index in the appended instructions
 	// for Codex and Grok, or for every engine with SkillDeliveryComposed.
@@ -173,6 +174,14 @@ func NewStream(engine harness.Engine, transcript io.Writer, options StreamOption
 			t.now = options.Clock
 		}
 		s.t = t
+	case harness.Antigravity:
+		t := newAntigravityTranscoder(transcript)
+		t.onEvent = options.OnEvent
+		t.structured = options.Structured
+		if options.Clock != nil {
+			t.now = options.Clock
+		}
+		s.t = t
 	default:
 		return nil, capabilityError(engine, CodeUnsupportedEngine)
 	}
@@ -208,15 +217,16 @@ func (s *Stream) Report() (json.RawMessage, error) {
 
 // buildArgs builds a native CLI invocation. Codex and Claude positionals sit
 // behind -- so variadic caller-supplied options cannot consume a prompt or
-// session ID; Grok binds every value with --flag=value, since its parser
-// rejects a separate value that begins with "-". report is Codex's private
-// schema and output files, when a Schema was requested.
+// session ID; Grok and Antigravity bind values with --flag=value. report is
+// Codex's private schema and output files, when a Schema was requested.
 func buildArgs(c Config, r Request, report *codexReport) []string {
 	switch c.Provider.Engine {
 	case harness.Codex:
 		return codexArgs(c, r, report)
 	case harness.Claude:
 		return claudeArgs(c, r)
+	case harness.Antigravity:
+		return antigravityArgs(c, r)
 	default:
 		return grokArgs(c, r)
 	}
@@ -311,7 +321,8 @@ func codexOverride(key, value string) string {
 func execute(ctx context.Context, c Config, args []string, workDir string, stdout, stderr io.Writer) error {
 	bin := c.Provider.CLI.Binary
 	if bin == "" {
-		bin = string(c.Provider.Engine)
+		d, _ := harness.Describe(c.Provider.Engine)
+		bin = d.Binary
 	}
 	cmd, p, err := process.Command(ctx, bin, args...)
 	if err != nil {
@@ -434,6 +445,9 @@ func overrideEnv(env []string, key, value string) []string {
 func nativeEnvironment(c Config) []string {
 	env := c.Env
 	engine := c.Provider.Engine
+	if engine == harness.Antigravity {
+		return withAntigravityEnvironment(env)
+	}
 	if home := c.Provider.CLI.Home; home != "" {
 		if env == nil {
 			env = os.Environ()
@@ -494,6 +508,11 @@ func Version(ctx context.Context, c Config) (string, error) {
 	}
 	if code := c.Provider.Problem(); code != "" {
 		return "", capabilityError(engine, code)
+	}
+	if engine == harness.Antigravity {
+		if code := nativecli.AntigravityHomeProblem(c.Provider.CLI.Home); code != "" {
+			return "", capabilityError(engine, code)
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err

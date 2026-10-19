@@ -184,6 +184,9 @@ func (s *Session) ReadContext(ctx context.Context) (ContextSnapshot, error) {
 	}
 	read := engines[s.options.Provider.Engine].context
 	if read == nil {
+		if !harness.Support(s.options.Provider.Engine, harness.Session, harness.ContextWindow).Usable() {
+			return s.Telemetry().Context, s.notOffered("context", func(c Capabilities) harness.Capability { return c.Context })
+		}
 		return s.Telemetry().Context, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)

@@ -8,7 +8,7 @@ import (
 
 func TestLoopbackPortsSupport(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux", "windows", "other"} {
-		for _, engine := range []Engine{Codex, Claude, Grok, CommandCode, OpenAICompatible, "unknown"} {
+		for _, engine := range []Engine{Codex, Claude, Grok, CommandCode, Antigravity, OpenAICompatible, "unknown"} {
 			for _, op := range []Operation{Session, Run, Complete, Models, Account, "unknown"} {
 				got := loopbackPortsSupport(engine, op, goos)
 				if got.Availability != Unsupported || !strings.Contains(got.Reason, "use Loopback") {

@@ -86,3 +86,19 @@ func TestOverrideReplacesCaseInsensitively(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestAntigravityEnvironmentRefusesCustomHomeAndSetsNonInteractiveDefaults(t *testing.T) {
+	env, code := AntigravityEnvironment("")
+	if code != "" {
+		t.Fatalf("empty home: %s", code)
+	}
+	if environmentValue(env, "AGY_CLI_DISABLE_AUTO_UPDATE") != "1" || environmentValue(env, "AGY_CLI_OSC7501") != "off" {
+		t.Fatalf("missing non-interactive defaults: %v", env)
+	}
+	if _, code := AntigravityEnvironment("relative"); code != "antigravity_home_invalid" {
+		t.Fatalf("relative home: %s", code)
+	}
+	if _, code := AntigravityEnvironment(t.TempDir()); code != "antigravity_home_unsupported" {
+		t.Fatalf("custom home: %s", code)
+	}
+}

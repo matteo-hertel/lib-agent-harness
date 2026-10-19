@@ -551,6 +551,12 @@ func TestNormalizePolicyDefaultsAndRefuses(t *testing.T) {
 		"claude refuses codex approval": {Options{Provider: harness.Provider{Engine: harness.Claude}, Policy: Policy{CodexApproval: "never"}}, Policy{}, false},
 		"codex refuses claude mode":     {Options{Provider: harness.Provider{Engine: harness.Codex}, Policy: Policy{ClaudePermission: "dontAsk"}}, Policy{}, false},
 		"codex refuses claude tools":    {Options{Provider: harness.Provider{Engine: harness.Codex}, Policy: Policy{ClaudeTools: []string{}}}, Policy{}, false},
+		"codex refuses agy mode":        {Options{Provider: harness.Provider{Engine: harness.Codex}, Policy: Policy{AntigravityPermission: AntigravityRequestReview}}, Policy{}, false},
+		"claude refuses agy mode":       {Options{Provider: harness.Provider{Engine: harness.Claude}, Policy: Policy{AntigravityPermission: AntigravityRequestReview}}, Policy{}, false},
+		"grok refuses agy mode":         {Options{Provider: harness.Provider{Engine: harness.Grok}, Policy: Policy{GrokPermission: GrokDenyWhenAsked, AntigravityPermission: AntigravityRequestReview}}, Policy{}, false},
+		"agy defaults":                  {Options{Provider: harness.Provider{Engine: harness.Antigravity}}, Policy{AntigravityPermission: AntigravityRequestReview}, true},
+		"agy chosen":                    {Options{Provider: harness.Provider{Engine: harness.Antigravity}, Policy: Policy{AntigravityPermission: AntigravityPlan}}, Policy{AntigravityPermission: AntigravityPlan}, true},
+		"agy bad mode":                  {Options{Provider: harness.Provider{Engine: harness.Antigravity}, Policy: Policy{AntigravityPermission: "always"}}, Policy{}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			// The order normalize applies them in: the caller's own fields are

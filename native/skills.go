@@ -51,6 +51,7 @@ const (
 	CodeGlobalSkillsInvalid     = "global_skills_invalid"
 	CodeSkillDeliveryInvalid    = "skill_delivery_invalid"
 	CodeGlobalSkillsUnsupported = "global_skills_unsupported"
+	CodeSkillsUnsupported       = "skills_unsupported"
 	CodeSkillsConflict          = "skills_conflict"
 	CodeSkillsUnavailable       = "skills_unavailable"
 )
@@ -74,9 +75,14 @@ func planSkills(c Config) (skillDelivery, []skills.Skill, *RunError) {
 		return noSkills, nil, capabilityError(engine, CodeGlobalSkillsUnsupported)
 	case set.Global == harness.GlobalSkillsInclude && engine == harness.Claude && (argsCarry(c.Args, claudeSkillSwitches) || argsCarry(c.Args, claudeSettingSwitches)):
 		return noSkills, nil, capabilityError(engine, CodeSkillsConflict)
+	case set.Global == harness.GlobalSkillsInclude && engine == harness.Antigravity && argsCarry(c.Args, []string{"disable-slash-commands"}):
+		return noSkills, nil, capabilityError(engine, CodeSkillsConflict)
 	}
 	if len(set.Provided) == 0 {
 		return noSkills, nil, nil
+	}
+	if !harness.Support(engine, harness.Run, harness.ProvidedSkills).Usable() {
+		return noSkills, nil, capabilityError(engine, CodeSkillsUnsupported)
 	}
 	loaded, err := skills.Load(set.Provided)
 	if err != nil {

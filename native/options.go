@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	harness "github.com/shhac/lib-agent-harness"
+	"github.com/shhac/lib-agent-harness/internal/nativecli"
 )
 
 // CodexOptions are Codex's own execution options.
@@ -54,6 +55,11 @@ func validate(c Config, r Request) *RunError {
 	if code := c.Provider.Problem(); code != "" {
 		return capabilityError(engine, code)
 	}
+	if engine == harness.Antigravity {
+		if code := nativecli.AntigravityHomeProblem(c.Provider.CLI.Home); code != "" {
+			return capabilityError(engine, code)
+		}
+	}
 	if code := optionProblem(c); code != "" {
 		return capabilityError(engine, code)
 	}
@@ -71,12 +77,19 @@ func validate(c Config, r Request) *RunError {
 
 func optionProblem(c Config) string {
 	engine := c.Provider.Engine
-	if (engine != harness.Codex && c.Codex.set()) || (engine != harness.Claude && c.Claude.set()) || (engine != harness.Grok && c.Grok.set()) {
+	if (engine != harness.Codex && c.Codex.set()) ||
+		(engine != harness.Claude && c.Claude.set()) ||
+		(engine != harness.Grok && c.Grok.set()) ||
+		(engine != harness.Antigravity && c.Antigravity.set()) {
 		return CodeOptionForOtherEngine
 	}
 	switch engine {
 	case harness.Claude:
 		if b := c.Claude.MaxBudgetUSD; b < 0 || math.IsNaN(b) || math.IsInf(b, 0) {
+			return CodeUnsupportedOption
+		}
+	case harness.Antigravity:
+		if !c.Antigravity.validMode() {
 			return CodeUnsupportedOption
 		}
 	case harness.Grok:
@@ -112,6 +125,9 @@ func requestProblem(engine harness.Engine, c Config, r Request) string {
 			return CodeUnsupportedOption
 		}
 	}
+	if engine == harness.Antigravity && r.AppendInstructions != "" {
+		return CodeUnsupportedOption
+	}
 	if r.Schema != "" && !json.Valid([]byte(r.Schema)) {
 		return CodeInvalidSchema
 	}
@@ -119,8 +135,8 @@ func requestProblem(engine harness.Engine, c Config, r Request) string {
 }
 
 // managedFlags are the flags each engine's argv builder owns, as spelled by
-// codex-cli exec, Claude Code and grok --help. Short options match with a
-// separate, attached or =-joined value.
+// codex-cli exec, Claude Code, grok --help, and agy --help. Short options match
+// with a separate, attached or =-joined value.
 var managedFlags = map[harness.Engine]struct {
 	long  []string
 	short string
@@ -136,6 +152,10 @@ var managedFlags = map[harness.Engine]struct {
 	harness.Grok: {
 		long:  []string{"single", "output-format", "json-schema", "tools", "sandbox", "permission-mode", "resume", "cwd", "model", "reasoning-effort", "effort", "rules"},
 		short: "prm",
+	},
+	harness.Antigravity: {
+		long:  []string{"print", "output-format", "input-format", "json-schema", "model", "effort", "mode", "dangerously-skip-permissions", "sandbox", "agent", "conversation"},
+		short: "pmc",
 	},
 }
 

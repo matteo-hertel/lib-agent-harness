@@ -69,6 +69,7 @@ var runErrorText = map[string]string{
 	CodeGlobalSkillsInvalid:     "Skills.Global is not a known value",
 	CodeSkillDeliveryInvalid:    "Skills.Delivery is not a known value",
 	CodeGlobalSkillsUnsupported: "this engine cannot honour the installed-skills request for a native run",
+	CodeSkillsUnsupported:       "this engine cannot honour provided skills for a native run",
 	CodeSkillsConflict:          "Args remove the skills this run was asked to make available",
 	CodeSkillsUnavailable:       "no private directory outside the workspace is available for the provided skills",
 }
