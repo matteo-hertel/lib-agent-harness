@@ -11,10 +11,9 @@ import (
 	"time"
 )
 
-func unlaunchedFixtureProof(t *testing.T, n Options) (Proof, error) {
-	t.Helper()
+func unlaunchedFixtureProof(n Options) (Proof, error) {
 	binary := "/bin/sh"
-	identity, err := workbenchBinaryFingerprint(binary)
+	identity, err := workbenchBinaryFingerprintForTest(binary)
 	if err != nil {
 		return Proof{}, err
 	}
@@ -27,7 +26,7 @@ func TestStandaloneRunnerTimeout(t *testing.T) {
 			o := commandSandboxOptions(t, false)
 			o.Timeout = timeout
 			proof, err := proveOptions(context.Background(), o, func(_ context.Context, n Options) (Proof, error) {
-				return unlaunchedFixtureProof(t, n)
+				return unlaunchedFixtureProof(n)
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -60,7 +59,7 @@ func TestOpenedSandboxLongRequestTimeout(t *testing.T) {
 	o := commandSandboxOptions(t, false)
 	o.Timeout = 45 * time.Minute
 	s, err := openWithProof(context.Background(), o, func(_ context.Context, n Options) (Proof, error) {
-		return unlaunchedFixtureProof(t, n)
+		return unlaunchedFixtureProof(n)
 	})
 	if err != nil {
 		t.Fatal(err)

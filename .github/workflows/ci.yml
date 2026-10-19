@@ -26,10 +26,11 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          if ! control="$(go run ./internal/cmd/loopbackcontrol)"; then
-            sudo mkdir -p /etc/resolver
-            printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 9.9.9.9\n' | sudo tee /etc/resolver/ci >/dev/null
-            control="$(go run ./internal/cmd/loopbackcontrol)"
+          go build -o "$RUNNER_TEMP/loopbackcontrol" ./internal/cmd/loopbackcontrol
+          # Hosted macOS VMs' DNS stub may not answer TCP 53; name a public
+          # control explicitly rather than planting it as configured DNS.
+          if ! control="$("$RUNNER_TEMP/loopbackcontrol")"; then
+            control="$("$RUNNER_TEMP/loopbackcontrol" 1.1.1.1)"
           fi
           echo "AGENT_HARNESS_TEST_LOOPBACK_CONTROL=$control" >> "$GITHUB_ENV"
       - run: go vet ./...
