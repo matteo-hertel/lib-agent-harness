@@ -1,4 +1,4 @@
-# Native Codex loopback refusal (unreleased)
+# Native Codex loopback refusal (v0.26.0)
 
 Codex session loopback remains unsupported. Its capability diagnostic now names
 Codex 0.160.0 and the owner's installed-runtime macOS observations: closed
@@ -23,7 +23,7 @@ Selected-port requests are refused everywhere by LAH-40 (see
 in the owner's checklist.
 
 
-## macOS command loopback exposure (LAH-39, unreleased; non-breaking)
+## macOS command loopback exposure (LAH-39, v0.27.0; non-breaking)
 
 Existing Loopback callers remain offered on macOS, with corrected claims:
 binds and inbound connections are allowed on every local interface, so a
@@ -75,7 +75,7 @@ still requires a real unsandboxed run; the owner's earlier Python-client run
 passed sandboxcheck and the interface proof but failed the now-corrected
 literal-host assertion.
 
-## Claude macOS interface diagnostics (unreleased; non-breaking)
+## Claude macOS interface diagnostics (v0.27.0; non-breaking)
 
 Claude macOS Loopback remains offered after its existing base nc proof passes.
 Support is Unknown until launch verification: localhost reach and bind must
@@ -101,7 +101,7 @@ Linux canary bytes, Windows refusal and durable formats are unchanged. Linux
 production admission now uses the per-command scope described below.
 No consumer-app update or release tag is needed for this additive change.
 
-## Claude Linux per-command Loopback
+## Claude Linux per-command Loopback (v0.27.0)
 
 The owner's Ubuntu 24.04.5 / bubblewrap 0.9.0 / Claude Code 2.1.289 run
 on `ce0e0d2001df0eef511af02ab954c71d408654ad` proved in-command loopback

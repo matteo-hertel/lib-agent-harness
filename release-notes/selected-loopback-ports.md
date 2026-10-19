@@ -1,4 +1,4 @@
-# Selected loopback port requests (unreleased; source compatibility note)
+# Selected loopback port requests (v0.27.0; source compatibility note)
 
 Adds Feature `harness.LoopbackPorts` (`"loopback_ports"`) and fields
 `LoopbackPorts []int` / `LoopbackControl string` on `sandbox.Options`,
