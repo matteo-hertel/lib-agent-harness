@@ -87,7 +87,7 @@ func TestOptionsForAnotherEngineAreRefused(t *testing.T) {
 		"grok sandbox on codex":     {Provider: provider(harness.Codex), Grok: GrokOptions{Sandbox: "strict"}},
 		"grok permission on claude": {Provider: provider(harness.Claude), Grok: GrokOptions{PermissionMode: "auto"}},
 		"agy mode on codex":         {Provider: provider(harness.Codex), Antigravity: AntigravityOptions{PermissionMode: "auto"}},
-		"agy sandbox on claude":     {Provider: provider(harness.Claude), Antigravity: AntigravityOptions{Sandbox: true}},
+		"agy agent on claude":       {Provider: provider(harness.Claude), Antigravity: AntigravityOptions{Agent: "coder"}},
 		"codex sandbox on agy":      {Provider: provider(harness.Antigravity), Codex: CodexOptions{Sandbox: "read-only"}},
 	} {
 		if facts := refusal(t, c, Request{Prompt: "p"}); facts.Code != CodeOptionForOtherEngine || facts.Engine != c.Provider.Engine {
@@ -112,6 +112,7 @@ func TestOptionsAnEngineCannotHonourAreRefused(t *testing.T) {
 		"grok browser":         {Config{Provider: provider(harness.Grok), Browser: true}, Request{}, CodeUnsupportedOption},
 		"agy browser":          {Config{Provider: provider(harness.Antigravity), Browser: true}, Request{}, CodeUnsupportedOption},
 		"agy instructions":     {Config{Provider: provider(harness.Antigravity)}, Request{AppendInstructions: "extra"}, CodeUnsupportedOption},
+		"agy unknown mode":     {Config{Provider: provider(harness.Antigravity), Antigravity: AntigravityOptions{PermissionMode: "yolo"}}, Request{}, CodeUnsupportedOption},
 		"agy custom home":      {Config{Provider: harness.Provider{Engine: harness.Antigravity, CLI: harness.CLI{Home: t.TempDir()}}}, Request{}, "antigravity_home_unsupported"},
 	} {
 		if facts := refusal(t, tc.c, tc.r); facts.Code != tc.code {
@@ -194,7 +195,7 @@ func TestRunErrorsCarryNoProviderText(t *testing.T) {
 			harness.Codex:       `{"type":"turn.failed","error":{"message":"` + secret + `"}}`,
 			harness.Claude:      `{"type":"result","is_error":true,"result":"` + secret + `"}`,
 			harness.Grok:        `{"type":"error","message":"` + secret + `"}` + "\n" + `{"type":"end","stopReason":"end_turn"}`,
-			harness.Antigravity: `{"event":"result","result":{"status":"ERROR","error":{"message":"` + secret + `"}}}` + "\n",
+			harness.Antigravity: `{"event":"result","result":{"status":"ERROR","error":"` + secret + `"}}` + "\n",
 		}[engine]
 		c := Config{Provider: provider(engine), RunCommand: func(_ context.Context, _ []string, _ string, out, _ io.Writer) error {
 			_, _ = io.WriteString(out, wire)
@@ -229,8 +230,12 @@ func TestCacheMapsOntoTheSharedInput(t *testing.T) {
 			harness.Usage{Known: true, Input: 42500, CacheRead: 30000, CacheWrite: 500, Output: 800, CacheKnown: true}, 12000},
 		"grok": {harness.Grok, `{"type":"end","stopReason":"end_turn","usage":{"input_tokens":10,"cache_read_input_tokens":5,"cache_creation_input_tokens":2,"output_tokens":3,"reasoning_tokens":1}}`,
 			harness.Usage{Known: true, Input: 17, CacheRead: 5, CacheWrite: 2, Output: 3, Reasoning: 1, CacheKnown: true, ReasoningKnown: true}, 10},
-		"antigravity": {harness.Antigravity, `{"event":"result","result":{"status":"SUCCESS","response":"ok","usage":{"input_tokens":10,"cache_read_tokens":5,"output_tokens":3,"thinking_tokens":2}}}`,
+		"antigravity": {harness.Antigravity, `{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","state":"DONE","text_delta":"ok","usage":{"input_tokens":10,"cache_read_tokens":5,"output_tokens":3,"thinking_tokens":2}}}` + "\n" + `{"event":"result","result":{"status":"SUCCESS","response":"ok","usage":{"input_tokens":99,"cache_read_tokens":50,"output_tokens":30,"thinking_tokens":2}}}`,
 			harness.Usage{Known: true, Input: 15, CacheRead: 5, Output: 5, Reasoning: 2, CacheKnown: true, ReasoningKnown: true}, 10},
+		"antigravity without cache": {harness.Antigravity, `{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","state":"DONE","text_delta":"ok","usage":{"input_tokens":10,"output_tokens":3}}}` + "\n" + `{"event":"result","result":{"status":"SUCCESS","response":"ok"}}`,
+			harness.Usage{Known: true, Input: 10, Output: 3}, -1},
+		"antigravity without counts": {harness.Antigravity, `{"event":"step_update","step_update":{"step_index":1,"step_type":"agent_response","state":"DONE","text_delta":"ok","usage":{}}}` + "\n" + `{"event":"result","result":{"status":"SUCCESS","response":"ok","usage":{"input_tokens":10,"output_tokens":3}}}`,
+			harness.Usage{}, -1},
 	} {
 		s, _ := NewStream(tc.engine, nil, StreamOptions{})
 		s.UserPrompt("p")

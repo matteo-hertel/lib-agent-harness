@@ -1,8 +1,10 @@
 package native
 
 // Antigravity's `--output-format=stream-json` is NDJSON, one `event`-tagged
-// object per line (verified against agy 1.4.0: `init`, `step_update`, and
-// terminal `result`).
+// object per line (verified against agy 1.4.2: `init`, `step_update`, and
+// terminal `result`). A result's usage covers the whole conversation, so a
+// resumed run would count earlier runs again: a run's usage is the sum of its
+// own agent_response steps instead.
 
 import (
 	"bytes"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	harness "github.com/shhac/lib-agent-harness"
+	"github.com/shhac/lib-agent-harness/internal/nativecli"
 	"github.com/shhac/lib-agent-harness/internal/rawjson"
 )
 
@@ -24,6 +27,8 @@ type antigravityWireEvent struct {
 	Error          *antigravityError      `json:"error"`
 }
 
+type antigravityError = nativecli.AntigravityError
+
 type antigravityStepUpdate struct {
 	StepIndex     int                  `json:"step_index"`
 	StepType      string               `json:"step_type"`
@@ -32,6 +37,7 @@ type antigravityStepUpdate struct {
 	ThinkingDelta string               `json:"thinking_delta"`
 	ToolName      string               `json:"tool_name"`
 	ToolInfo      *antigravityToolInfo `json:"tool_info"`
+	Usage         json.RawMessage      `json:"usage"`
 }
 
 type antigravityToolInfo struct {
@@ -46,32 +52,33 @@ type antigravityResult struct {
 	Response         string            `json:"response"`
 	StructuredOutput json.RawMessage   `json:"structured_output"`
 	Error            *antigravityError `json:"error"`
-	Usage            *antigravityUsage `json:"usage"`
 }
 
-type antigravityError struct {
-	Message string `json:"message"`
-}
-
-// antigravityUsage is agy's JSONUsage on the terminal result event.
-// input_tokens is uncached input; cache_read_tokens is reported beside it.
+// antigravityUsage is agy's JSONUsage on an agent_response step: one model
+// response. input_tokens is uncached input, with cache_read_tokens beside it
+// (observed on agy 1.4.2: a repeated prefix moved from one to the other).
 // thinking_tokens is reasoning output reported beside output_tokens.
 type antigravityUsage struct {
-	InputTokens     int64 `json:"input_tokens"`
-	OutputTokens    int64 `json:"output_tokens"`
-	ThinkingTokens  int64 `json:"thinking_tokens"`
-	CacheReadTokens int64 `json:"cache_read_tokens"`
+	InputTokens     *int64 `json:"input_tokens"`
+	OutputTokens    *int64 `json:"output_tokens"`
+	ThinkingTokens  *int64 `json:"thinking_tokens"`
+	CacheReadTokens *int64 `json:"cache_read_tokens"`
 }
 
-func (u antigravityUsage) usage() harness.Usage {
-	return harness.Usage{
-		Input:          u.InputTokens + u.CacheReadTokens,
-		Output:         u.OutputTokens + u.ThinkingTokens,
-		CacheRead:      u.CacheReadTokens,
-		Reasoning:      u.ThinkingTokens,
-		CacheKnown:     true,
-		ReasoningKnown: true,
+// usage is not known unless agy states both input and output counts.
+func (u antigravityUsage) usage() (harness.Usage, bool) {
+	if u.InputTokens == nil || u.OutputTokens == nil {
+		return harness.Usage{}, false
 	}
+	read, reasoning := valueOrZero(u.CacheReadTokens), valueOrZero(u.ThinkingTokens)
+	return harness.Usage{
+		Input:          *u.InputTokens + read,
+		Output:         *u.OutputTokens + reasoning,
+		CacheRead:      read,
+		Reasoning:      reasoning,
+		CacheKnown:     u.CacheReadTokens != nil,
+		ReasoningKnown: u.ThinkingTokens != nil,
+	}, true
 }
 
 type antigravityTranscoder struct {
@@ -86,10 +93,12 @@ type antigravityTranscoder struct {
 	rawUsage        []json.RawMessage
 	report          json.RawMessage
 	failure         string
+	authFailed      bool
 	text            strings.Builder
 	lastResponse    string
 	startedTools    map[string]bool
 	completedTools  map[string]bool
+	countedSteps    map[int]bool
 	running         map[string]time.Time
 	now             func() time.Time
 }
@@ -99,6 +108,7 @@ func newAntigravityTranscoder(out io.Writer) *antigravityTranscoder {
 		markerSink:     markerSink{out: out},
 		startedTools:   map[string]bool{},
 		completedTools: map[string]bool{},
+		countedSteps:   map[int]bool{},
 		running:        map[string]time.Time{},
 		now:            time.Now,
 	}
@@ -110,17 +120,24 @@ func (t *antigravityTranscoder) beginTurn(prompt string) {
 	t.completed = false
 	t.report = nil
 	t.failure = ""
+	t.authFailed = false
 	t.text.Reset()
 	t.lastResponse = ""
 	clear(t.startedTools)
 	clear(t.completedTools)
+	clear(t.countedSteps)
 	clear(t.running)
 	t.userPrompt(prompt)
 }
 
 func (t *antigravityTranscoder) reachedTerminal() bool { return t.completed }
 
-func (t *antigravityTranscoder) failureCause() (harness.Cause, *time.Time) { return "", nil }
+func (t *antigravityTranscoder) failureCause() (harness.Cause, *time.Time) {
+	if t.authFailed {
+		return harness.CauseAuthentication, nil
+	}
+	return "", nil
+}
 
 func (t *antigravityTranscoder) snapshot() Result {
 	usage := t.usage
@@ -169,7 +186,7 @@ func (t *antigravityTranscoder) consume(line []byte) {
 		t.renderFailure(msg)
 	case "result":
 		if ev.Result != nil {
-			t.consumeResult(*ev.Result, line)
+			t.consumeResult(*ev.Result)
 		}
 	}
 }
@@ -192,9 +209,34 @@ func (t *antigravityTranscoder) consumeStepUpdate(u antigravityStepUpdate) {
 			t.lastResponse = t.text.String()
 			t.text.Reset()
 		}
+		if u.State == "DONE" {
+			t.countStepUsage(u)
+		}
 	case "tool":
 		t.consumeToolUpdate(u)
 	}
+}
+
+// countStepUsage counts each response once. A response without both counts
+// leaves the run's usage unknown rather than undercounted.
+func (t *antigravityTranscoder) countStepUsage(u antigravityStepUpdate) {
+	if t.countedSteps[u.StepIndex] {
+		return
+	}
+	t.countedSteps[u.StepIndex] = true
+	var parsed antigravityUsage
+	if rawjson.Absent(u.Usage) || json.Unmarshal(u.Usage, &parsed) != nil {
+		t.usageIncomplete = true
+		return
+	}
+	usage, ok := parsed.usage()
+	if !ok {
+		t.usageIncomplete = true
+		return
+	}
+	t.rawUsage = append(t.rawUsage, append(json.RawMessage(nil), u.Usage...))
+	t.usage = addUsage(t.usage, usage, !t.sawUsage)
+	t.sawUsage = true
 }
 
 func (t *antigravityTranscoder) consumeToolUpdate(u antigravityStepUpdate) {
@@ -243,7 +285,7 @@ func (t *antigravityTranscoder) consumeToolUpdate(u antigravityStepUpdate) {
 	}
 }
 
-func (t *antigravityTranscoder) consumeResult(res antigravityResult, line []byte) {
+func (t *antigravityTranscoder) consumeResult(res antigravityResult) {
 	t.flushPrompt()
 	if res.Response != "" && t.finalText() == "" {
 		t.text.WriteString(res.Response)
@@ -251,18 +293,8 @@ func (t *antigravityTranscoder) consumeResult(res antigravityResult, line []byte
 		t.emit("antigravity", res.Response)
 	}
 	t.completed = true
-	if res.Usage != nil {
-		raw := extractAntigravityUsage(line)
-		if raw == nil {
-			raw, _ = json.Marshal(res.Usage)
-		}
-		t.rawUsage = append(t.rawUsage, raw)
-		t.usage = addUsage(t.usage, res.Usage.usage(), !t.sawUsage)
-		t.sawUsage = true
-	} else {
-		t.usageIncomplete = true
-	}
 
+	t.authFailed = res.Error != nil && nativecli.AntigravityAuthFailure(res.Error.Message)
 	report := t.resultReport(res)
 	failure := antigravityResultFailure(res, t.structured, len(report) > 0)
 	if failure == "" && t.failure == "" {
@@ -327,16 +359,4 @@ func antigravityResultFailure(res antigravityResult, structured, hasReport bool)
 		return "the run ended without structured output"
 	}
 	return ""
-}
-
-func extractAntigravityUsage(line []byte) json.RawMessage {
-	var env struct {
-		Result struct {
-			Usage json.RawMessage `json:"usage"`
-		} `json:"result"`
-	}
-	if json.Unmarshal(line, &env) != nil || rawjson.Absent(env.Result.Usage) {
-		return nil
-	}
-	return env.Result.Usage
 }

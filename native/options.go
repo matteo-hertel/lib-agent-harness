@@ -88,6 +88,10 @@ func optionProblem(c Config) string {
 		if b := c.Claude.MaxBudgetUSD; b < 0 || math.IsNaN(b) || math.IsInf(b, 0) {
 			return CodeUnsupportedOption
 		}
+	case harness.Antigravity:
+		if !c.Antigravity.validMode() {
+			return CodeUnsupportedOption
+		}
 	case harness.Grok:
 		if !c.Grok.Telemetry.valid() {
 			return CodeUnsupportedOption

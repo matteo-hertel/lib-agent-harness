@@ -1686,7 +1686,7 @@ if report.Credits.Known() && report.Credits.Balance != nil {
 | Codex | `account/read` | `account/rateLimits/read` | credit balance, spend control, rate-limit resets |
 | Claude | `initialize.account` | `get_usage` and `rate_limit_event` | spend and extra-usage allowance, in minor currency units |
 | Grok | agent protocol `check_subscription` | unsupported | unsupported |
-| Antigravity | `agy -p=/credits --output-format json` (`tier_name`) | `agy -p=/usage --output-format json` (per-model quota windows) | `agy -p=/credits --output-format json` (`available_credits`) |
+| Antigravity | `agy -p=/credits --output-format json` (`plan_name`), or `/usage` for a login without credits | `agy -p=/usage --output-format json` (per-model-group quota windows) | `agy -p=/credits --output-format json` (`remaining_credits`) |
 
 A missing CLI is a classified `not_installed` failure. `session.Inspect` remains
 for Codex and Claude and also returns a session's `Capabilities`.
@@ -1772,13 +1772,17 @@ if err != nil {
   workspace, where a workspace-write agent cannot forge it. Codex constrains
   every message to the schema; `harness.Support(e, harness.Run,
   harness.ProgressMessages)` says whether an engine lets the agent write
-  unconstrained progress messages first. Antigravity uses a composed schema
-  footer in the prompt and validates the final JSON response against the
-  schema.
+  unconstrained progress messages first. Antigravity passes the schema with
+  `--json-schema` and reads the final result's `structured_output`.
 - Engine-specific execution settings live in `Config.Codex`, `Config.Claude`,
-  `Config.Grok` and `Config.Antigravity` (`PermissionMode`: `"request-review"`,
-  `"accept-edits"`, `"auto"`, or `"plan"`). Options for another engine, and
-  `Args` that repeat a flag the library manages, are refused.
+  `Config.Grok` and `Config.Antigravity` (`PermissionMode`: `"accept-edits"`,
+  `"auto"` or `"plan"`; empty leaves agy's default, `request-review`, which
+  auto-denies any tool needing approval in a non-interactive run). Options for
+  another engine, and `Args` that repeat a flag the library manages, are
+  refused.
+- An Antigravity result's usage covers its whole conversation, so a run's
+  usage is the sum of its own responses, and a resumed run does not count
+  earlier runs again.
 - Failures are `*native.RunError` values with harness facts. The provider's own
   account of a failed turn is only in `Result.Failure`.
 - A Grok turn that ends with any stop reason other than `end_turn` is a failure.

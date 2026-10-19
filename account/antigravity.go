@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	harness "github.com/shhac/lib-agent-harness"
@@ -25,7 +26,9 @@ const antigravityOutputLimit = 4 << 20
 
 // inspectAntigravity runs `agy -p=/credits --output-format json` and
 // `agy -p=/usage --output-format json` in a disposable directory. Neither
-// slash command starts a model turn or creates a conversation.
+// slash command starts a model turn or creates a conversation. Some logins
+// have no credits (agy 1.4.2: "no credits info found"); their quota still
+// stands, and /usage then shows the login.
 func inspectAntigravity(ctx context.Context, p harness.Provider, binary string) (harness.AccountReport, error) {
 	report := unknownReport(p.Engine, "not inspected")
 	env, code := nativecli.AntigravityEnvironment(p.CLI.Home)
@@ -46,40 +49,69 @@ func inspectAntigravity(ctx context.Context, p harness.Provider, binary string) 
 	defer cancel()
 
 	creditsRaw, err := antigravityCommand(ctx, binary, dir, env, "/credits")
+	if errors.Is(err, errAntigravityLoggedOut) {
+		return antigravityLoggedOut(report), nil
+	}
 	if err != nil {
-		if ctx.Err() != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return report, ctx.Err()
-		}
-		return report, antigravityError(err)
+		return report, antigravityCommandError(ctx, err)
 	}
 	account, credits, loggedIn, err := parseAntigravityCredits(creditsRaw)
-	if err != nil {
+	creditsRefused := errors.Is(err, errAntigravityRejected)
+	switch {
+	case creditsRefused:
+		report.Credits.Reason = "the CLI reported no credits for this login"
+	case err != nil:
 		return report, antigravityError(err)
+	case !loggedIn:
+		return antigravityLoggedOut(report), nil
+	default:
+		report.Account = account
+		report.Credits = credits
 	}
-	report.Account = account
-	if !loggedIn {
-		report.Quota.Reason = "not logged in"
-		report.Credits.Reason = "not logged in"
-		return report, nil
-	}
-	report.Credits = credits
 
 	usageRaw, err := antigravityCommand(ctx, binary, dir, env, "/usage")
+	if errors.Is(err, errAntigravityLoggedOut) {
+		return antigravityLoggedOut(report), nil
+	}
 	if err != nil {
-		if ctx.Err() != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return report, ctx.Err()
-		}
-		return report, antigravityError(err)
+		return report, antigravityCommandError(ctx, err)
 	}
 	quota, err := parseAntigravityUsage(usageRaw)
 	if err != nil {
 		return report, antigravityError(err)
 	}
 	report.Quota = quota
+	if creditsRefused {
+		loggedIn := true
+		report.Account = harness.AccountSnapshot{Observation: quota.Observation, LoggedIn: &loggedIn}
+	}
 	return explained(report, "not reported by the CLI"), nil
 }
 
-func antigravityCommand(ctx context.Context, binary, dir string, env []string, slash string) ([]byte, error) {
+func antigravityLoggedOut(report harness.AccountReport) harness.AccountReport {
+	loggedIn := false
+	report.Account = harness.AccountSnapshot{
+		Observation: harness.Observation{Quality: harness.Measured, ObservedAt: time.Now().UTC(), Source: "agy"},
+		LoggedIn:    &loggedIn,
+	}
+	report.Quota, report.Credits = harness.QuotaSnapshot{}, harness.CreditSnapshot{}
+	report.Quota.Reason = "not logged in"
+	report.Credits.Reason = "not logged in"
+	return report
+}
+
+func antigravityCommandError(ctx context.Context, err error) error {
+	if ctx.Err() != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return ctx.Err()
+	}
+	return antigravityError(err)
+}
+
+// antigravityCommand stops at agy's logged-out prompt rather than sitting out
+// the minute it waits for a browser login.
+func antigravityCommand(parent context.Context, binary, dir string, env []string, slash string) ([]byte, error) {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
 	cmd, proc, err := process.Command(ctx, binary, "-p="+slash, "--output-format", "json")
 	if err != nil {
 		return nil, errAntigravityStart
@@ -88,7 +120,8 @@ func antigravityCommand(ctx context.Context, binary, dir string, env []string, s
 	cmd.Dir = dir
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(nil)
-	cmd.Stderr = io.Discard
+	prompt := &antigravityAuthWatch{cancel: cancel}
+	cmd.Stderr = prompt
 	cmd.WaitDelay = 2 * time.Second
 
 	reader, writer := io.Pipe()
@@ -107,6 +140,9 @@ func antigravityCommand(ctx context.Context, binary, dir string, env []string, s
 	data, readErr := readBoundedAntigravity(reader, antigravityOutputLimit)
 	_ = reader.Close()
 	exit := <-reaped
+	if prompt.seen() && parent.Err() == nil {
+		return nil, errAntigravityLoggedOut
+	}
 
 	if err := ctx.Err(); err != nil && (readErr != nil || len(bytes.TrimSpace(data)) == 0) {
 		return nil, err
@@ -118,6 +154,46 @@ func antigravityCommand(ctx context.Context, binary, dir string, env []string, s
 		return nil, antigravityExit(exit)
 	}
 	return data, nil
+}
+
+// antigravityAuthWatch reads agy's stderr for the logged-out prompt and keeps
+// none of it: the prompt carries a login URL.
+type antigravityAuthWatch struct {
+	cancel  context.CancelFunc
+	mu      sync.Mutex
+	partial []byte
+	matched bool
+}
+
+func (w *antigravityAuthWatch) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.matched {
+		return len(p), nil
+	}
+	w.partial = append(w.partial, p...)
+	for {
+		line, rest, ok := bytes.Cut(w.partial, []byte("\n"))
+		if !ok {
+			break
+		}
+		w.partial = rest
+		if nativecli.AntigravityAuthPrompt(string(line)) {
+			w.matched, w.partial = true, nil
+			w.cancel()
+			return len(p), nil
+		}
+	}
+	if len(w.partial) > 4<<10 {
+		w.partial = nil
+	}
+	return len(p), nil
+}
+
+func (w *antigravityAuthWatch) seen() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.matched
 }
 
 func readBoundedAntigravity(r io.Reader, limit int64) ([]byte, error) {
@@ -136,10 +212,8 @@ func readBoundedAntigravity(r io.Reader, limit int64) ([]byte, error) {
 }
 
 type antigravityEnvelope struct {
-	Status string `json:"status"`
-	Error  *struct {
-		Message string `json:"message"`
-	} `json:"error"`
+	Status  string                      `json:"status"`
+	Error   *nativecli.AntigravityError `json:"error"`
 	Command *struct {
 		Name string          `json:"name"`
 		Data json.RawMessage `json:"data"`
@@ -156,7 +230,7 @@ func parseAntigravityEnvelope(raw []byte, wantCommand string) (json.RawMessage, 
 		if env.Error != nil {
 			msg = strings.ToLower(env.Error.Message)
 		}
-		if strings.Contains(msg, "not logged in") || strings.Contains(msg, "sign in") || strings.Contains(msg, "unauthenticated") || strings.Contains(msg, "login required") {
+		if nativecli.AntigravityAuthFailure(msg) || strings.Contains(msg, "not logged in") || strings.Contains(msg, "sign in") || strings.Contains(msg, "unauthenticated") || strings.Contains(msg, "login required") {
 			return nil, true, nil
 		}
 		if strings.Contains(msg, "unknown command") || strings.Contains(msg, "unrecognized command") {
@@ -300,10 +374,11 @@ func parseAntigravityUsage(raw []byte) (harness.QuotaSnapshot, error) {
 }
 
 var (
-	errAntigravityStart    = errors.New("antigravity could not start")
-	errAntigravityInvalid  = errors.New("antigravity answered in an unrecognized shape")
-	errAntigravityMethod   = errors.New("antigravity does not offer the method")
-	errAntigravityRejected = errors.New("antigravity refused the request")
+	errAntigravityStart     = errors.New("antigravity could not start")
+	errAntigravityInvalid   = errors.New("antigravity answered in an unrecognized shape")
+	errAntigravityMethod    = errors.New("antigravity does not offer the method")
+	errAntigravityRejected  = errors.New("antigravity refused the request")
+	errAntigravityLoggedOut = errors.New("antigravity asked for a login")
 )
 
 func antigravityExit(err error) error {

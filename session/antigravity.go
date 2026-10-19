@@ -20,6 +20,17 @@ package session
 //     checks `init.model` against `Options.Model` before any prompt is sent.
 //   - Each user turn is sent as `{"event":"user","message":{"content":...}}`
 //     and streams `step_update` events followed by a terminal `result` event.
+//
+// Rechecked against agy 1.4.2:
+//
+//   - `--mode` accepts accept-edits, auto and plan. Its default, which `init`
+//     reports as `request-review`, is not a `--mode` value: agy warns and
+//     carries on in its configured default. So request-review passes no flag,
+//     and `init.permission_mode` must name the policy before any prompt.
+//   - In request-review, a tool that needs approval is auto-denied, never
+//     held for an answer; the result lists it in `denied_actions`.
+//   - A result's usage covers every turn of the conversation so far. A turn's
+//     settled usage is the sum of its own agent_response steps.
 
 import (
 	"context"
@@ -34,7 +45,10 @@ import (
 )
 
 func antigravityArgs(o Options, nativeID string, resuming bool) []string {
-	args := []string{"-p=", "--input-format=stream-json", "--output-format=stream-json", "--mode=" + o.Policy.AntigravityPermission}
+	args := []string{"-p=", "--input-format=stream-json", "--output-format=stream-json"}
+	if o.Policy.AntigravityPermission != AntigravityRequestReview {
+		args = append(args, "--mode="+o.Policy.AntigravityPermission)
+	}
 	if resuming {
 		args = append(args, "--conversation="+nativeID)
 	}
@@ -214,8 +228,8 @@ func (s *Session) initializeAntigravity(ctx context.Context, resume bool) error 
 	if s.options.Model != "" && state.model != s.options.Model {
 		return &CapabilityError{Engine: harness.Antigravity, Code: CapabilityChangedModel, Phase: BeforeFirstPrompt}
 	}
-	if s.options.Policy.AntigravityPermission != "" && state.permissionMode != "" && state.permissionMode != s.options.Policy.AntigravityPermission {
-		return ErrProtocol
+	if state.permissionMode != s.options.Policy.AntigravityPermission {
+		return &CapabilityError{Engine: harness.Antigravity, Code: CapabilityChangedPermissionMode, Phase: BeforeFirstPrompt}
 	}
 	s.mu.Lock()
 	s.ref.ID = state.conversationID

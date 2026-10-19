@@ -432,13 +432,24 @@ func antigravityFixture(flag string) int {
 		time.Sleep(time.Minute)
 		return 15
 	case "unsupported":
-		fmt.Println(`{"status":"ERROR","error":{"message":"Unknown command /credits: must-not-escape"}}`)
+		fmt.Println(`{"status":"ERROR","error":"Unknown command /credits: must-not-escape"}`)
 	case "rejected":
-		fmt.Println(`{"status":"ERROR","error":{"message":"backend failure must-not-escape"}}`)
+		fmt.Println(`{"status":"ERROR","error":"backend failure must-not-escape"}`)
 	case "malformed":
 		fmt.Println(`{"status":"SUCCESS","command":{"name":"other","data":{}}}`)
 	case "logged_out":
-		fmt.Println(`{"status":"ERROR","error":{"message":"Not logged in; run agy auth login"}}`)
+		// agy 1.4.2 prompts at once, then waits a minute for a browser login.
+		fmt.Fprintln(os.Stderr, "Authentication required. Please visit the URL to log in:\n  https://accounts.example/must-not-escape")
+		time.Sleep(time.Minute)
+		fmt.Println(`{"conversation_id":"","status":"ERROR","response":"","error":"authentication failed or timed out","usage":{"input_tokens":0,"output_tokens":0}}`)
+	case "auth_failed":
+		fmt.Println(`{"conversation_id":"","status":"ERROR","response":"","error":"authentication failed or timed out","usage":{"input_tokens":0,"output_tokens":0}}`)
+	case "no_credits":
+		if flag == "-p=/credits" {
+			fmt.Println(`{"conversation_id":"","status":"ERROR","response":"","error":"/credits failed: retrieving credits: no credits info found"}`)
+		} else {
+			fmt.Println(antigravityUsageFixture)
+		}
 	default:
 		if flag == "-p=/credits" {
 			fmt.Println(antigravityCreditsFixture)
@@ -499,17 +510,43 @@ func TestAntigravityInspect(t *testing.T) {
 }
 
 func TestAntigravityLoggedOut(t *testing.T) {
-	p, home := antigravityFixtureProvider(t, "logged_out")
+	for _, mode := range []string{"logged_out", "auth_failed"} {
+		t.Run(mode, func(t *testing.T) {
+			p, home := antigravityFixtureProvider(t, mode)
+			started := time.Now()
+			report, err := Inspect(testContext(t), p)
+			if err != nil || !report.Account.Known() || report.Account.LoggedIn == nil || *report.Account.LoggedIn {
+				t.Fatalf("logged out: %+v %v", report, err)
+			}
+			if elapsed := time.Since(started); elapsed > 20*time.Second {
+				t.Fatalf("waited %v for a login that was never coming", elapsed)
+			}
+			if report.Quota.Known() || report.Quota.Reason == "" || report.Credits.Known() || report.Credits.Reason == "" {
+				t.Fatalf("logged out quota/credits: %+v", report)
+			}
+			commands, _ := os.ReadFile(filepath.Join(home, "commands"))
+			if string(commands) != "-p=/credits\n" {
+				t.Fatalf("logged out should not run /usage: %q", commands)
+			}
+			raw, _ := json.Marshal(report)
+			if strings.Contains(string(raw), "must-not-escape") {
+				t.Fatal("provider text escaped")
+			}
+		})
+	}
+}
+
+func TestAntigravityLoginWithoutCreditsStillReportsQuota(t *testing.T) {
+	p, _ := antigravityFixtureProvider(t, "no_credits")
 	report, err := Inspect(testContext(t), p)
-	if err != nil || !report.Account.Known() || report.Account.LoggedIn == nil || *report.Account.LoggedIn {
-		t.Fatalf("logged out: %+v %v", report, err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if report.Quota.Known() || report.Quota.Reason == "" || report.Credits.Known() || report.Credits.Reason == "" {
-		t.Fatalf("logged out quota/credits: %+v", report)
+	if !report.Account.Known() || report.Account.LoggedIn == nil || !*report.Account.LoggedIn || report.Account.Source != "/usage" {
+		t.Fatalf("account: %+v", report.Account)
 	}
-	commands, _ := os.ReadFile(filepath.Join(home, "commands"))
-	if string(commands) != "-p=/credits\n" {
-		t.Fatalf("logged out should not run /usage: %q", commands)
+	if report.Credits.Known() || report.Credits.Reason == "" || !report.Quota.Known() || len(report.Quota.Windows) != 2 {
+		t.Fatalf("credits %+v quota %+v", report.Credits, report.Quota)
 	}
 }
 

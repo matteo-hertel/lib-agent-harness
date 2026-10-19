@@ -23,7 +23,7 @@ const (
 var antigravityToolIdentifier = regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,128}$`)
 
 func (s *Session) antigravityEvent(t *Turn, ref Ref, m map[string]json.RawMessage) {
-	if id := str(m, "conversation_id"); id != "" && ref.ID != "" && id != ref.ID {
+	if id := antigravityConversation(m); id != "" && ref.ID != "" && id != ref.ID {
 		s.fail(ErrProtocol)
 		return
 	}
@@ -37,6 +37,23 @@ func (s *Session) antigravityEvent(t *Turn, ref Ref, m map[string]json.RawMessag
 	case "result":
 		s.antigravityResult(t, m["result"])
 	}
+}
+
+// antigravityConversation is the frame's conversation: agy 1.4.2 states it
+// inside step_update and result payloads, and only init carries it at the top.
+func antigravityConversation(m map[string]json.RawMessage) string {
+	if id := str(m, "conversation_id"); id != "" {
+		return id
+	}
+	for _, key := range []string{"step_update", "result"} {
+		var payload struct {
+			ConversationID string `json:"conversation_id"`
+		}
+		if json.Unmarshal(m[key], &payload) == nil && payload.ConversationID != "" {
+			return payload.ConversationID
+		}
+	}
+	return ""
 }
 
 func (s *Session) antigravityStepUpdate(t *Turn, raw json.RawMessage) {
@@ -65,10 +82,8 @@ func (s *Session) antigravityStepUpdate(t *Turn, raw json.RawMessage) {
 		if u.TextDelta != "" {
 			s.text(t, itemID, u.TextDelta, false)
 		}
-		if u.State == "DONE" && !rawjson.Absent(u.Usage) {
-			if usage := parseAntigravityUsage(u.Usage); usage.Known {
-				s.observeRequestUsage(t, usage)
-			}
+		if u.State == "DONE" {
+			s.antigravityStepUsage(t, itemID, u.Usage)
 		}
 	case "tool":
 		name := u.ToolName
@@ -121,12 +136,30 @@ func (s *Session) antigravityStepUpdate(t *Turn, raw json.RawMessage) {
 	}
 }
 
+// antigravityStepUsage observes each response once. A response without both
+// counts leaves the turn's settled usage unknown rather than undercounted.
+func (s *Session) antigravityStepUsage(t *Turn, itemID string, raw json.RawMessage) {
+	usage := parseAntigravityUsage(raw)
+	t.mu.Lock()
+	if t.antigravityTools == nil {
+		t.antigravityTools = map[string]bool{}
+	}
+	counted := t.antigravityTools[itemID+":usage"]
+	t.antigravityTools[itemID+":usage"] = true
+	if !counted && !usage.Known {
+		t.antigravityUsageGap = true
+	}
+	t.mu.Unlock()
+	if !counted {
+		s.observeRequestUsage(t, usage)
+	}
+}
+
 func (s *Session) antigravityResult(t *Turn, raw json.RawMessage) {
 	var r struct {
 		Status   string          `json:"status"`
 		Response string          `json:"response"`
 		Error    json.RawMessage `json:"error"`
-		Usage    json.RawMessage `json:"usage"`
 	}
 	if json.Unmarshal(raw, &r) != nil || r.Status == "" {
 		s.fail(ErrProtocol)
@@ -136,12 +169,12 @@ func (s *Session) antigravityResult(t *Turn, raw json.RawMessage) {
 	if status == "completed" && r.Response != "" {
 		s.text(t, "result", r.Response, true)
 	}
-	var usage Usage
-	if status == "completed" && !rawjson.Absent(r.Usage) {
-		usage = parseAntigravityUsage(r.Usage)
-	}
 	var err error
 	t.mu.Lock()
+	var usage Usage
+	if status == "completed" && !t.antigravityUsageGap {
+		usage = t.result.Observed
+	}
 	if usage.Known {
 		usage.Final = true
 		t.result.Usage = usage

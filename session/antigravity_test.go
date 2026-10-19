@@ -19,12 +19,14 @@ import (
 
 // A synthetic Antigravity CLI: this test binary re-executed as
 // `agy -p= --input-format=stream-json --output-format=stream-json ...`.
-// It answers with the shapes agy 0.2.2 was observed to use, performs no
-// inference and reads no login.
+// It answers with the shapes agy 1.4.2 was observed to use (conversation IDs
+// inside step_update and result, string result errors, and result usage that
+// covers the whole conversation), performs no inference and reads no login.
 const (
 	antigravityFixtureEnv   = "LIB_HARNESS_AGY_FIXTURE"
 	antigravityFixtureLog   = "LIB_HARNESS_AGY_FIXTURE_LOG"
 	antigravityFixtureModel = "LIB_HARNESS_AGY_FIXTURE_MODEL"
+	antigravityFixtureMode  = "LIB_HARNESS_AGY_FIXTURE_MODE"
 )
 
 func init() {
@@ -67,6 +69,9 @@ func runAntigravityFixture() int {
 	if override := os.Getenv(antigravityFixtureModel); override != "" {
 		model = override
 	}
+	if override := os.Getenv(antigravityFixtureMode); override != "" {
+		mode = override
+	}
 
 	out := json.NewEncoder(os.Stdout)
 	send := func(m map[string]any) bool { return out.Encode(m) == nil }
@@ -85,6 +90,7 @@ func runAntigravityFixture() int {
 		return 3
 	}
 
+	turns := int64(0)
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 0, 64<<10), 4<<20)
 	for in.Scan() {
@@ -99,7 +105,30 @@ func runAntigravityFixture() int {
 		}
 		text := frame.Message.Content
 		record("prompt", text)
+		turns++
 		switch {
+		case strings.HasSuffix(text, "no usage"):
+			send(map[string]any{
+				"type":  "event",
+				"event": "step_update",
+				"step_update": map[string]any{
+					"conversation_id": convID,
+					"step_index":      1,
+					"step_type":       "agent_response",
+					"state":           "DONE",
+					"text_delta":      "answer",
+				},
+			})
+			send(map[string]any{
+				"type":  "event",
+				"event": "result",
+				"result": map[string]any{
+					"conversation_id": convID,
+					"status":          "SUCCESS",
+					"response":        "answer",
+					"usage":           map[string]any{"input_tokens": 10, "output_tokens": 4},
+				},
+			})
 		case strings.HasSuffix(text, "fail"):
 			send(map[string]any{
 				"type":            "event",
@@ -108,24 +137,24 @@ func runAntigravityFixture() int {
 				"error":           map[string]any{"message": "secret provider stream error"},
 			})
 			send(map[string]any{
-				"type":            "event",
-				"event":           "result",
-				"conversation_id": convID,
+				"type":  "event",
+				"event": "result",
 				"result": map[string]any{
-					"status": "ERROR",
-					"error":  map[string]any{"message": "secret provider result error"},
+					"conversation_id": convID,
+					"status":          "ERROR",
+					"error":           "secret provider result error",
 				},
 			})
 		default:
 			send(map[string]any{
-				"type":            "event",
-				"event":           "step_update",
-				"conversation_id": convID,
+				"type":  "event",
+				"event": "step_update",
 				"step_update": map[string]any{
-					"step_index": 1,
-					"step_type":  "tool",
-					"state":      "IN_PROGRESS",
-					"tool_name":  "view_file",
+					"conversation_id": convID,
+					"step_index":      1,
+					"step_type":       "tool",
+					"state":           "IN_PROGRESS",
+					"tool_name":       "view_file",
 					"tool_info": map[string]any{
 						"name":       "view_file",
 						"parameters": map[string]any{"AbsolutePath": "/workspace/README.md"},
@@ -133,14 +162,14 @@ func runAntigravityFixture() int {
 				},
 			})
 			send(map[string]any{
-				"type":            "event",
-				"event":           "step_update",
-				"conversation_id": convID,
+				"type":  "event",
+				"event": "step_update",
 				"step_update": map[string]any{
-					"step_index": 1,
-					"step_type":  "tool",
-					"state":      "DONE",
-					"tool_name":  "view_file",
+					"conversation_id": convID,
+					"step_index":      1,
+					"step_type":       "tool",
+					"state":           "DONE",
+					"tool_name":       "view_file",
 					"tool_info": map[string]any{
 						"name":       "view_file",
 						"parameters": map[string]any{"AbsolutePath": "/workspace/README.md"},
@@ -149,25 +178,25 @@ func runAntigravityFixture() int {
 				},
 			})
 			send(map[string]any{
-				"type":            "event",
-				"event":           "step_update",
-				"conversation_id": convID,
+				"type":  "event",
+				"event": "step_update",
 				"step_update": map[string]any{
-					"step_index": 2,
-					"step_type":  "agent_response",
-					"state":      "GENERATING",
-					"text_delta": "fixture ",
+					"conversation_id": convID,
+					"step_index":      2,
+					"step_type":       "agent_response",
+					"state":           "GENERATING",
+					"text_delta":      "fixture ",
 				},
 			})
 			send(map[string]any{
-				"type":            "event",
-				"event":           "step_update",
-				"conversation_id": convID,
+				"type":  "event",
+				"event": "step_update",
 				"step_update": map[string]any{
-					"step_index": 2,
-					"step_type":  "agent_response",
-					"state":      "DONE",
-					"text_delta": "answer",
+					"conversation_id": convID,
+					"step_index":      2,
+					"step_type":       "agent_response",
+					"state":           "DONE",
+					"text_delta":      "answer",
 					"usage": map[string]any{
 						"model":             model,
 						"input_tokens":      10,
@@ -178,20 +207,19 @@ func runAntigravityFixture() int {
 				},
 			})
 			send(map[string]any{
-				"type":            "event",
-				"event":           "result",
-				"conversation_id": convID,
+				"type":  "event",
+				"event": "result",
 				"result": map[string]any{
-					"status":      "SUCCESS",
-					"response":    "fixture answer",
-					"duration_ms": 120,
-					"num_turns":   1,
+					"conversation_id": convID,
+					"status":          "SUCCESS",
+					"response":        "fixture answer",
+					"duration_ms":     120,
+					"num_turns":       turns,
 					"usage": map[string]any{
-						"model":             model,
-						"input_tokens":      15,
-						"output_tokens":     6,
-						"thinking_tokens":   2,
-						"cache_read_tokens": 70,
+						"input_tokens":      10 * turns,
+						"output_tokens":     4 * turns,
+						"thinking_tokens":   2 * turns,
+						"cache_read_tokens": 30 * turns,
 					},
 				},
 			})
@@ -259,15 +287,25 @@ func TestAntigravitySessionOverStreamJSON(t *testing.T) {
 	if slices.Index(kinds, "tool_started") < 0 || slices.Index(kinds, "tool_completed") < 0 || kinds[len(kinds)-1] != "status" {
 		t.Fatalf("events: %v", kinds)
 	}
-	if len(observed) != 2 || observed[0].Final || observed[0].Input != 40 || observed[0].Output != 6 || !observed[1].Final || observed[1].Input != 85 || observed[1].Output != 8 {
+	if len(observed) != 2 || observed[0].Final || observed[0].Input != 40 || observed[0].Output != 6 || !observed[1].Final || observed[1].Input != 40 || observed[1].Output != 6 {
 		t.Fatalf("usage observations: %+v", observed)
 	}
 	final := result.Usage
-	if !final.Final || final.Input != 85 || final.CacheRead != 70 || final.Output != 8 || final.Reasoning != 2 || !final.CacheKnown || !final.ReasoningKnown {
+	if !final.Final || final.Input != 40 || final.CacheRead != 30 || final.Output != 6 || final.Reasoning != 2 || !final.CacheKnown || !final.ReasoningKnown {
 		t.Fatalf("turn accounting: %+v", final)
 	}
-	if fresh, ok := final.Fresh(); !ok || fresh != 15 {
+	if fresh, ok := final.Fresh(); !ok || fresh != 10 {
 		t.Fatalf("fresh input %d %v", fresh, ok)
+	}
+
+	// The second result's usage covers both turns; this turn settles its own.
+	second, err := s.StartTurn(ctx, Input{Text: "again"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	drain(t, second)
+	if result, err = second.Wait(ctx); err != nil || result.Usage.Input != 40 || result.Usage.Output != 6 || !result.Usage.Final {
+		t.Fatalf("second turn: %+v %v", result.Usage, err)
 	}
 
 	if err = s.Interrupt(ctx, turn.ID()); !errors.Is(err, ErrUnsupported) {
@@ -294,7 +332,7 @@ func TestAntigravitySessionOverStreamJSON(t *testing.T) {
 	s.Close()
 
 	logged := grokFixtureLogged(t, log)
-	if logged["args"][0] != "-p= --input-format=stream-json --output-format=stream-json --mode=request-review --model=gemini-3.1-pro-high --effort=low" {
+	if logged["args"][0] != "-p= --input-format=stream-json --output-format=stream-json --model=gemini-3.1-pro-high --effort=low" {
 		t.Errorf("arguments: %q", logged["args"])
 	}
 	if logged["gemini"][0] != "" || logged["agy"][0] != "" || logged["autoupdate"][0] != "1" {
@@ -515,5 +553,47 @@ func TestPersistedAntigravityRefIsStable(t *testing.T) {
 	want := `{"engine":"antigravity","id":"s1","home":"/h","work_dir":"/w","config_hash":"c8e3b76362441a2856536bd56d881e2029659bd2efdadfc1d350bfee47aa722c"}`
 	if string(got) != want {
 		t.Fatalf("persisted ref changed:\n got %s\nwant %s", got, want)
+	}
+}
+
+// agy rejects --mode=request-review, so that default passes no flag and the
+// session relies on init naming the mode it is actually in.
+func TestAntigravityPermissionModeIsCheckedBeforeTheFirstPrompt(t *testing.T) {
+	ctx := testContext(t)
+	o, log := antigravityFixtureOptions(t)
+	o.Policy.AntigravityPermission = AntigravityAuto
+	s, err := Start(ctx, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if args := grokFixtureLogged(t, log)["args"]; len(args) != 1 || !strings.Contains(args[0], " --mode=auto") {
+		t.Fatalf("arguments: %q", args)
+	}
+
+	o, _ = antigravityFixtureOptions(t)
+	t.Setenv(antigravityFixtureMode, "auto")
+	var capability *CapabilityError
+	if _, err = Start(ctx, o); !errors.As(err, &capability) || capability.Code != CapabilityChangedPermissionMode || capability.Phase != BeforeFirstPrompt {
+		t.Fatalf("a request-review session in another mode: %v", err)
+	}
+}
+
+func TestAntigravityTurnWithoutResponseUsageIsUnknown(t *testing.T) {
+	ctx := testContext(t)
+	o, _ := antigravityFixtureOptions(t)
+	s, err := Start(ctx, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	turn, err := s.StartTurn(ctx, Input{Text: "no usage"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	drain(t, turn)
+	result, err := turn.Wait(ctx)
+	if err != nil || result.Usage.Known {
+		t.Fatalf("usage: %+v %v", result.Usage, err)
 	}
 }

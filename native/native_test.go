@@ -627,7 +627,7 @@ func TestAntigravityRunAndStream(t *testing.T) {
 		Provider:    harness.Provider{Engine: harness.Antigravity},
 		Model:       "gemini-3-flash",
 		Effort:      "high",
-		Antigravity: AntigravityOptions{PermissionMode: "auto", Sandbox: true, Agent: "coder"},
+		Antigravity: AntigravityOptions{PermissionMode: "auto", Agent: "coder"},
 		Args:        []string{"--add-dir", "/extra"},
 		RunCommand: func(_ context.Context, args []string, _ string, out, _ io.Writer) error {
 			gotArgs = slices.Clone(args)
@@ -636,8 +636,10 @@ func TestAntigravityRunAndStream(t *testing.T) {
 				`{"event":"step_update","conversation_id":"conv-123","step_update":{"step_index":1,"step_type":"agent_response","state":"ACTIVE","thinking_delta":"plan"}}`,
 				`{"event":"step_update","conversation_id":"conv-123","step_update":{"step_index":2,"step_type":"tool","state":"ACTIVE","tool_name":"view_file","tool_info":{"name":"view_file","parameters":{"AbsolutePath":"/w/a.go"}}}}`,
 				`{"event":"step_update","conversation_id":"conv-123","step_update":{"step_index":2,"step_type":"tool","state":"DONE","tool_name":"view_file","tool_info":{"name":"view_file","parameters":{"AbsolutePath":"/w/a.go"},"output":"package a"}}}`,
-				`{"event":"step_update","conversation_id":"conv-123","step_update":{"step_index":3,"step_type":"agent_response","state":"DONE","text_delta":"{\"ok\":true}"}}`,
-				`{"event":"result","conversation_id":"conv-123","result":{"status":"SUCCESS","response":"{\"ok\":true}","structured_output":{"ok":true},"usage":{"input_tokens":100,"cache_read_tokens":20,"output_tokens":10,"thinking_tokens":5}}}`,
+				`{"event":"step_update","step_update":{"conversation_id":"conv-123","step_index":1,"step_type":"agent_response","state":"DONE","usage":{"input_tokens":60,"cache_read_tokens":0,"output_tokens":4,"thinking_tokens":2}}}`,
+				`{"event":"step_update","step_update":{"conversation_id":"conv-123","step_index":3,"step_type":"agent_response","state":"DONE","text_delta":"{\"ok\":true}","usage":{"input_tokens":40,"cache_read_tokens":20,"output_tokens":6,"thinking_tokens":3}}}`,
+				`{"event":"step_update","step_update":{"conversation_id":"conv-123","step_index":3,"step_type":"agent_response","state":"DONE","usage":{"input_tokens":40,"cache_read_tokens":20,"output_tokens":6,"thinking_tokens":3}}}`,
+				`{"event":"result","result":{"conversation_id":"conv-123","status":"SUCCESS","response":"{\"ok\":true}","structured_output":{"ok":true},"num_turns":2,"usage":{"input_tokens":900,"cache_read_tokens":20,"output_tokens":90,"thinking_tokens":5}}}`,
 			}
 			for _, line := range lines {
 				_, _ = io.WriteString(out, line+"\n")
@@ -657,7 +659,6 @@ func TestAntigravityRunAndStream(t *testing.T) {
 		"--model=gemini-3-flash",
 		"--effort=high",
 		"--mode=auto",
-		"--sandbox",
 		"--agent=coder",
 		"--add-dir", "/extra",
 	}
@@ -686,5 +687,23 @@ func TestAntigravityRunAndStream(t *testing.T) {
 		if strings.HasPrefix(entry, "ANTIGRAVITY_") || strings.HasPrefix(entry, "JETSKI_") {
 			t.Fatalf("leaked parent server env: %s", entry)
 		}
+	}
+}
+
+// agy 1.4.2's logged-out result, verbatim: a string error and all-zero usage
+// for a run that reached no model.
+func TestAntigravityLoggedOutRunIsAnAuthenticationFailure(t *testing.T) {
+	wire := `{"event":"result","result":{"conversation_id":"","status":"ERROR","response":"","error":"authentication failed or timed out","duration_seconds":0,"num_turns":0,"usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":0}}}` + "\n"
+	c := Config{Provider: provider(harness.Antigravity), RunCommand: func(_ context.Context, _ []string, _ string, out, _ io.Writer) error {
+		_, _ = io.WriteString(out, wire)
+		return nil
+	}}
+	result, err := Run(context.Background(), c, Request{Prompt: "p"}, nil)
+	facts, _ := harness.ErrorFacts(err)
+	if facts.Code != CodeTurnFailed || facts.Cause != harness.CauseAuthentication {
+		t.Fatalf("facts: %+v", facts)
+	}
+	if result.Usage.Known || result.Failure != "authentication failed or timed out" {
+		t.Fatalf("result: %+v", result)
 	}
 }

@@ -9,16 +9,23 @@ import (
 
 // AntigravityOptions are Antigravity's own execution options.
 type AntigravityOptions struct {
-	// PermissionMode is passed as --mode (such as "accept-edits", "auto",
-	// "plan", or "request-review").
+	// PermissionMode is passed as --mode: "accept-edits", "auto" or "plan".
+	// Empty passes no --mode, so agy's own default applies; agy 1.4.2 names
+	// that default "request-review" but does not accept it as a --mode value.
 	PermissionMode string
-	// Sandbox enables Antigravity's native sandbox (--sandbox).
-	Sandbox bool
 	// Agent selects the agent profile (--agent).
 	Agent string
 }
 
 func (o AntigravityOptions) set() bool { return o != AntigravityOptions{} }
+
+func (o AntigravityOptions) validMode() bool {
+	switch o.PermissionMode {
+	case "", "accept-edits", "auto", "plan":
+		return true
+	}
+	return false
+}
 
 // withAntigravityEnvironment strips inherited parent Antigravity language-server
 // attachment variables so the child starts its own run, and applies non-interactive
@@ -60,9 +67,6 @@ func antigravityArgs(c Config, r Request) []string {
 	option("model", c.Model)
 	option("effort", c.Effort)
 	option("mode", c.Antigravity.PermissionMode)
-	if c.Antigravity.Sandbox {
-		args = append(args, "--sandbox")
-	}
 	option("agent", c.Antigravity.Agent)
 	return append(args, c.Args...)
 }

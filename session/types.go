@@ -126,7 +126,9 @@ type Policy struct {
 	CommandCodePermission string `json:"command_code_permission,omitempty"`
 	// AntigravityPermission selects `agy --mode`: AntigravityRequestReview
 	// ("request-review", the default), AntigravityAcceptEdits ("accept-edits"),
-	// AntigravityAuto ("auto") or AntigravityPlan ("plan").
+	// AntigravityAuto ("auto") or AntigravityPlan ("plan"). Request-review is
+	// agy's own default and takes no flag; it auto-denies any tool that needs
+	// approval. Every mode is checked against the mode agy reports at startup.
 	AntigravityPermission string `json:"antigravity_permission,omitempty"`
 }
 
@@ -450,6 +452,9 @@ type Turn struct {
 	// antigravityTools tracks which Antigravity tool step IDs have emitted
 	// tool_started and tool_completed in this turn.
 	antigravityTools map[string]bool
+	// antigravityUsageGap records a response in this turn that reported no
+	// usable counts, which leaves the turn's settled usage unknown.
+	antigravityUsageGap bool
 	// closeTools shuts the caller's tool channel when this turn ends.
 	closeTools func()
 	// claudeRefusal is why Claude refused this turn's latest request, kept for
