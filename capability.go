@@ -390,7 +390,7 @@ var supportTable = map[supportKey]Capability{
 	{Fx, Session, Steer}:               {Composed, "fx steering cancels the running prompt and sends another"},
 	{Fx, Session, Effort}:              {Native, "set through session/set_config_option and checked against the configuration the session reports before the first turn"},
 	{Fx, Session, CacheSplit}:          {Unsupported, "fx states no split between cached and fresh input"},
-	{Fx, Session, ContextWindow}:       {Native, "the used and size figures from the usage_update each turn ends with"},
+	{Fx, Session, ContextWindow}:       {Unknown, "fx's own used and size figures from the usage_update each turn ends with"},
 	{Fx, Session, ToolActivity}:        {Native, "the agent protocol's rawInput, and rawOutput or content on a tool call's final update"},
 	{Fx, Session, ToolImages}:          {Unknown, "image content blocks in an ACP tool call update, as the protocol declares them; not seen from a real tool"},
 	{Fx, Session, Background}:          background,
