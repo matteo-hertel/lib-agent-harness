@@ -208,12 +208,15 @@ func runFxFixture() int {
 				record("cancel", "")
 				reply(map[string]any{"stopReason": "cancelled", "usage": map[string]any{"inputTokens": 4, "outputTokens": 0}})
 			default:
+				// fx 0.0.14 gives each message its own id, and states its own
+				// notices as one before the reply.
+				update(map[string]any{"sessionUpdate": "agent_message_chunk", "messageId": "m0", "content": map[string]any{"type": "text", "text": "[context] skill catalog shortened\n"}})
 				update(map[string]any{"sessionUpdate": "agent_message_chunk", "messageId": "m1", "content": map[string]any{"type": "text", "text": "Let me look. "}})
 				update(map[string]any{"sessionUpdate": "tool_call", "toolCallId": "call_1", "name": "read_file", "kind": "read", "status": "pending", "rawInput": map[string]any{"path": "README.md"}})
 				update(map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": "call_1", "status": "completed", "content": []any{map[string]any{"type": "content", "content": map[string]any{"type": "text", "text": "# lib-agent-harness"}}}})
-				update(map[string]any{"sessionUpdate": "agent_message_chunk", "messageId": "m1", "content": map[string]any{"type": "text", "text": "answer"}})
+				update(map[string]any{"sessionUpdate": "agent_message_chunk", "messageId": "m2", "content": map[string]any{"type": "text", "text": "answer"}})
 				update(map[string]any{"sessionUpdate": "usage_update", "used": 4096, "size": 200000})
-				reply(map[string]any{"stopReason": "end_turn", "usage": map[string]any{"inputTokens": 85, "outputTokens": 6, "reasoningTokens": 1}})
+				reply(map[string]any{"stopReason": "end_turn", "usage": map[string]any{"inputTokens": 85, "outputTokens": 6, "cacheReadTokens": 64, "cacheWriteTokens": 0, "reasoningTokens": 1}})
 			}
 		default:
 			if len(id) != 0 {
@@ -269,7 +272,7 @@ func TestFxSessionOverTheAgentProtocol(t *testing.T) {
 	}
 	events := drain(t, turn)
 	result, err := turn.Wait(ctx)
-	if err != nil || result.Status != "completed" || result.Text != "Let me look. answer" {
+	if err != nil || result.Status != "completed" || result.Text != "answer" {
 		t.Fatalf("%+v %v", result, err)
 	}
 	var kinds []string
@@ -286,8 +289,8 @@ func TestFxSessionOverTheAgentProtocol(t *testing.T) {
 	if !final.Known || !final.Final || final.Input != 85 || final.Output != 6 || final.Reasoning != 1 || !final.ReasoningKnown {
 		t.Fatalf("turn accounting: %+v", final)
 	}
-	if final.CacheKnown {
-		t.Fatal("fx reported a cache split it does not state")
+	if !final.CacheKnown || final.CacheRead != 64 || final.CacheWrite != 0 {
+		t.Fatalf("cache split: %+v", final)
 	}
 	c := result.Context
 	if c.Quality != harness.Measured || c.UsedTokens == nil || *c.UsedTokens != 4096 || c.CapacityTokens == nil || *c.CapacityTokens != 200000 {

@@ -11,8 +11,9 @@ package session
 //     as systemPrompt content blocks, which fx appends to its own system
 //     prompt; there is no way to replace that prompt.
 //   - session/resume {sessionId, cwd, mcpServers} answers with the
-//     configOptions alone: no session id, no modes, and an error for a
-//     conversation fx does not hold.
+//     configOptions and the modes, but no session id, and with -32602
+//     "Session not found" for a conversation fx does not hold. The
+//     instructions the session was created with still apply.
 //   - session/set_config_option {sessionId, configId, value} sets the
 //     provider, the model, the mode, the effort or the ultrafast tier, and
 //     answers with the resulting configOptions. The mode is one of them, so a
@@ -268,8 +269,8 @@ func (s *Session) initializeFx(ctx context.Context, resume bool) error {
 
 // configureFx puts the session in the asking mode, then sets the model and
 // the effort. Each change is read back from fx, and the session's own report
-// is what is checked: fx keeps a model it was given even when no such model
-// exists, and the request itself says nothing about that.
+// is what is checked rather than the request's success. fx 0.0.14 refuses a
+// model or an effort it does not offer with -32602.
 func (s *Session) configureFx(ctx context.Context, id string, state fxSessionState) error {
 	config, err := s.setFxMode(ctx, id, state)
 	if err != nil {

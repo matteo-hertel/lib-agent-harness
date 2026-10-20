@@ -168,12 +168,8 @@ func (s *Session) fxPromptEnded(t *Turn, body json.RawMessage, err error) {
 		return
 	}
 	var r struct {
-		StopReason string `json:"stopReason"`
-		Usage      struct {
-			Input     *int64 `json:"inputTokens"`
-			Output    *int64 `json:"outputTokens"`
-			Reasoning *int64 `json:"reasoningTokens"`
-		} `json:"usage"`
+		StopReason string          `json:"stopReason"`
+		Usage      json.RawMessage `json:"usage"`
 	}
 	if json.Unmarshal(body, &r) != nil || r.StopReason == "" {
 		s.failTurn(t, ErrProtocol)
@@ -183,7 +179,7 @@ func (s *Session) fxPromptEnded(t *Turn, body json.RawMessage, err error) {
 	interrupted := t.interruptRequested
 	t.mu.Unlock()
 	status, code := fxOutcome(r.StopReason, interrupted)
-	s.fxTurnEnded(t, status, code, "", parseFxTurnUsage(r.Usage.Input, r.Usage.Output, r.Usage.Reasoning))
+	s.fxTurnEnded(t, status, code, "", parseFxTurnUsage(r.Usage))
 }
 
 // fxOutcome maps a stop reason to a turn status and, for a failure, a fixed
@@ -227,24 +223,25 @@ func (s *Session) fxTurnEnded(t *Turn, status, code string, cause harness.Cause,
 	t.finish(status, err)
 }
 
-// parseFxTurnUsage reads the turn's accounting from a prompt response. fx
-// reports the whole input, without splitting out cached tokens, and its
-// reasoning tokens are part of its output.
-func parseFxTurnUsage(input, output, reasoning *int64) Usage {
-	if input == nil || output == nil {
+// parseFxTurnUsage reads the turn's accounting from a prompt response. Its
+// inputTokens already counts cached input: on fx 0.0.14 a turn's input and
+// output match the context its usage_update then states, with the cache reads
+// inside that input. Reasoning tokens are part of the output.
+func parseFxTurnUsage(raw json.RawMessage) Usage {
+	var c struct {
+		Input     *int64 `json:"inputTokens"`
+		Output    *int64 `json:"outputTokens"`
+		Read      *int64 `json:"cacheReadTokens"`
+		Write     *int64 `json:"cacheWriteTokens"`
+		Reasoning *int64 `json:"reasoningTokens"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &c) != nil || c.Input == nil || c.Output == nil {
 		return Usage{}
 	}
-	in, out := *input, *output
-	if in < 0 || out < 0 {
+	read, write, reasoning := valueOr(c.Read), valueOr(c.Write), valueOr(c.Reasoning)
+	input, output := *c.Input, *c.Output
+	if input < 0 || output < 0 || read < 0 || write < 0 || reasoning < 0 || read > input || write > input-read || reasoning > output {
 		return Usage{}
 	}
-	reasoningKnown := reasoning != nil
-	reasoningTokens := int64(0)
-	if reasoning != nil {
-		reasoningTokens = *reasoning
-		if reasoningTokens < 0 || reasoningTokens > out {
-			return Usage{}
-		}
-	}
-	return Usage{Usage: harness.Usage{Known: true, Input: in, Output: out, Reasoning: reasoningTokens, ReasoningKnown: reasoningKnown}}
+	return Usage{Usage: harness.Usage{Known: true, Input: input, Output: output, CacheRead: read, CacheWrite: write, Reasoning: reasoning, CacheKnown: c.Read != nil && c.Write != nil, ReasoningKnown: c.Reasoning != nil}}
 }

@@ -18,6 +18,7 @@ import (
 type fxDocument struct {
 	Output      string `json:"output"`
 	FinalOutput string `json:"final_output"`
+	Error       string `json:"error"`
 	ExitCode    *int   `json:"exit_code"`
 	Model       string `json:"model"`
 	SessionID   string `json:"session_id"`
@@ -170,8 +171,13 @@ func fxToolFailed(status string) bool {
 }
 
 // fxFailureText is what fx said went wrong, or a plain statement that it
-// failed without saying why.
+// failed without saying why. A failed run's output is the assistant's text so
+// far, such as what it was about to do, so it is used only when fx named no
+// error.
 func fxFailureText(doc fxDocument) string {
+	if doc.Error != "" {
+		return doc.Error
+	}
 	if text := doc.Output; text != "" {
 		return text
 	}

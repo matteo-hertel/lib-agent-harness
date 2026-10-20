@@ -120,6 +120,23 @@ func TestFxStreamKeepsAFailedRunAsAFailure(t *testing.T) {
 	}
 }
 
+// The document fx 0.0.14 writes when an asking run reaches a write: its
+// output is what the assistant was about to do, and the error names why the
+// run stopped.
+func TestFxStreamNamesTheErrorRatherThanTheAssistantText(t *testing.T) {
+	s, err := NewStream(harness.Fx, nil, StreamOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.UserPrompt("hi")
+	_, _ = s.Write([]byte(`{"output":"I will create n.txt, then confirm completion.","final_output":"","error":"NonInteractivePermissionRequired","exit_code":1,"model":"","resolved_provider":null,"session_id":"","steps":0,"tool_calls":[{"name":"write_file","status":"error"}],"usage":{"input_tokens":11599,"output_tokens":70}}` + "\n"))
+	s.Close()
+	r := s.Snapshot()
+	if r.Failure != "NonInteractivePermissionRequired" || r.Report != nil {
+		t.Fatalf("failure: %+v", r)
+	}
+}
+
 func TestFxStreamWithoutADocumentIsNotAResponse(t *testing.T) {
 	s, err := NewStream(harness.Fx, nil, StreamOptions{})
 	if err != nil {
