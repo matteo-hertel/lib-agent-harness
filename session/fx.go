@@ -413,28 +413,49 @@ func fxServerReply(m map[string]json.RawMessage, permission string) map[string]a
 }
 
 // fxPermissionOutcome selects the allow-once option under FxAllowWhenAsked
-// and the reject-once option otherwise, and only when the request offers the
-// option it wants. A request that offers neither is answered cancelled, so
-// no permission and no answer is ever guessed.
+// and the reject-once option otherwise, and only when the request offers
+// both. A request that offers neither, or that offers two options of the
+// same kind or the same id, is answered cancelled: a shared id would let a
+// deny be read as an allow. A tool that would change the permission mode is
+// rejected under either policy, because allowing it would let every later
+// change run without asking.
 func fxPermissionOutcome(raw json.RawMessage, permission string) map[string]any {
-	want := "reject_once"
-	if permission == FxAllowWhenAsked {
-		want = "allow_once"
-	}
 	var p struct {
+		ToolCall struct {
+			Kind string `json:"kind"`
+		} `json:"toolCall"`
 		Options []struct {
 			ID   string `json:"optionId"`
 			Kind string `json:"kind"`
 		} `json:"options"`
 	}
-	if json.Unmarshal(raw, &p) == nil {
-		for _, option := range p.Options {
-			if option.Kind == want && option.ID != "" {
-				return map[string]any{"outcome": "selected", "optionId": option.ID}
-			}
-		}
+	cancelled := map[string]any{"outcome": "cancelled"}
+	if json.Unmarshal(raw, &p) != nil {
+		return cancelled
 	}
-	return map[string]any{"outcome": "cancelled"}
+	chosen := map[string]string{}
+	ids := map[string]bool{}
+	for _, option := range p.Options {
+		if option.ID == "" {
+			continue
+		}
+		if _, seen := chosen[option.Kind]; seen {
+			return cancelled
+		}
+		if ids[option.ID] {
+			return cancelled
+		}
+		chosen[option.Kind] = option.ID
+		ids[option.ID] = true
+	}
+	allow, reject := chosen["allow_once"], chosen["reject_once"]
+	if allow == "" || reject == "" {
+		return cancelled
+	}
+	if permission == FxAllowWhenAsked && p.ToolCall.Kind != "switch_mode" {
+		return map[string]any{"outcome": "selected", "optionId": allow}
+	}
+	return map[string]any{"outcome": "selected", "optionId": reject}
 }
 
 // fx's own refusal codes, beside the ones every ACP agent shares.

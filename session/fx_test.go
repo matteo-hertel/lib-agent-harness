@@ -27,6 +27,9 @@ const (
 	// fxFixtureNoAsk makes the fixture behave like an fx whose modes do not
 	// include the one that asks.
 	fxFixtureNoAsk = "LIB_HARNESS_FX_FIXTURE_NO_ASK"
+	// fxFixtureSharedOption makes the fixture offer two permission options
+	// that share one id, the shape a deny must not be read from.
+	fxFixtureSharedOption = "LIB_HARNESS_FX_FIXTURE_SHARED_OPTION"
 )
 
 func init() {
@@ -49,11 +52,13 @@ func runFxFixture() int {
 	record("args", strings.Join(os.Args[1:], " "))
 	record("home", os.Getenv("HOME"))
 	record("fx", os.Getenv("FX_ULTRAFAST"))
+	record("fxmodel", os.Getenv("FX_MODEL"))
 
 	model, effort, mode := "fx-default", "high", "auto"
 	session := "fx-session-1"
 	noMode := os.Getenv(fxFixtureNoMode) == "1"
 	noAsk := os.Getenv(fxFixtureNoAsk) == "1"
+	sharedOption := os.Getenv(fxFixtureSharedOption) == "1"
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 0, 64<<10), 4<<20)
 	out := json.NewEncoder(os.Stdout)
@@ -171,10 +176,18 @@ func runFxFixture() int {
 			switch {
 			case strings.HasSuffix(text, "permission"):
 				update(map[string]any{"sessionUpdate": "tool_call", "toolCallId": "call_1", "name": "write_file", "kind": "edit", "status": "pending", "rawInput": map[string]any{"path": "/tmp/x"}})
-				send(map[string]any{"jsonrpc": "2.0", "id": 5, "method": "session/request_permission", "params": map[string]any{"sessionId": session, "toolCall": map[string]any{"toolCallId": "call_1", "name": "write_file", "kind": "edit"}, "options": []any{
+				options := []any{
 					map[string]any{"optionId": "allow_once", "kind": "allow_once"},
 					map[string]any{"optionId": "allow_always", "kind": "allow_always"},
-					map[string]any{"optionId": "reject_once", "kind": "reject_once"}}}})
+					map[string]any{"optionId": "reject_once", "kind": "reject_once"}}
+				if sharedOption {
+					// Two options that share one id: a deny chosen from them
+					// could be read as an allow.
+					options = []any{
+						map[string]any{"optionId": "shared", "kind": "allow_once"},
+						map[string]any{"optionId": "shared", "kind": "reject_once"}}
+				}
+				send(map[string]any{"jsonrpc": "2.0", "id": 5, "method": "session/request_permission", "params": map[string]any{"sessionId": session, "toolCall": map[string]any{"toolCallId": "call_1", "name": "write_file", "kind": "edit"}, "options": options}})
 				answer, ok := next()
 				if !ok || string(answer["id"]) != "5" {
 					return 3
@@ -380,6 +393,84 @@ func TestFxResumeOfAConversationItDoesNotHoldIsRefused(t *testing.T) {
 	if !errors.Is(err, errConversationGone) {
 		t.Fatalf("resume: %v", err)
 	}
+}
+
+func TestFxAnswersARequestWithASharedOptionIdAsCancelled(t *testing.T) {
+	// Two options that share one id: a deny chosen from them could be read as
+	// an allow, so the request is answered cancelled instead.
+	for _, policy := range []string{FxDenyWhenAsked, FxAllowWhenAsked} {
+		t.Run(policy, func(t *testing.T) {
+			o, log := fxFixtureOptions(t)
+			o.Policy.FxPermission = policy
+			t.Setenv(fxFixtureSharedOption, "1")
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			s, err := Start(ctx, o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			turn, err := s.StartTurn(ctx, Input{Text: "write permission"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			drain(t, turn)
+			if _, err = turn.Wait(ctx); err != nil {
+				t.Fatal(err)
+			}
+			logged := fxFixtureLogged(t, log)
+			if len(logged["permission"]) != 1 || logged["permission"][0] != "cancelled:" {
+				t.Fatalf("permission answers: %v", logged["permission"])
+			}
+		})
+	}
+}
+
+func TestFxInheritsTheOperatorsProtectiveVariables(t *testing.T) {
+	// The operator's own bounds, cost and network switches are inherited, and
+	// accepted as additions; the rest of fx's variables stay managed.
+	t.Setenv("FX_MAX_AGENT_STEPS", "20")
+	t.Setenv("FX_ULTRAFAST", "0")
+	t.Setenv("FX_AUTO_UPGRADE", "0")
+	t.Setenv("FX_MODEL", "operator/model")
+	o, log := fxFixtureOptions(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s, err := Start(ctx, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	logged := fxFixtureLogged(t, log)
+	if logged["fx"][0] != "0" {
+		t.Fatalf("a protective fx variable did not reach the session: %v", logged["fx"])
+	}
+	if len(logged["fxmodel"]) != 1 || logged["fxmodel"][0] != "" {
+		t.Fatalf("a managed fx variable reached the session: %v", logged["fxmodel"])
+	}
+}
+
+func TestFxRefusesAManagedVariableAsAnAddition(t *testing.T) {
+	o, _ := fxFixtureOptions(t)
+	o.Env = []string{"FX_MODEL=other/model"}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := Start(ctx, o)
+	if err == nil || !strings.Contains(err.Error(), "FX_MODEL") {
+		t.Fatalf("managed addition: %v", err)
+	}
+}
+
+func TestFxAcceptsAProtectiveVariableAsAnAddition(t *testing.T) {
+	o, _ := fxFixtureOptions(t)
+	o.Env = []string{"FX_MAX_AGENT_STEPS=12"}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s, err := Start(ctx, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
 }
 
 func TestFxRefusesInstructionsItCannotAppend(t *testing.T) {

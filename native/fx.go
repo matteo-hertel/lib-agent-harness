@@ -3,14 +3,17 @@ package native
 // FxOptions are fx's own execution options.
 type FxOptions struct {
 	// PermissionMode selects how fx resolves the permission requests a run
-	// makes: "ask" (fx's own default), "auto" (fx reviews each unresolved
-	// request itself) or "full-access" (fx makes no checks at all). Empty
-	// leaves fx's default, which asks.
+	// makes: "ask" (fx asks for every action that changes anything),
+	// "auto" (fx reviews each request itself) or "full-access" (fx makes
+	// no checks at all). Empty leaves whatever fx itself resolves, which
+	// is the operator's saved setting: fx's own default is "auto", and
+	// the operator's own profile may ask.
 	//
-	// A run started by this library has no terminal to ask on, so "ask" means
-	// fx resolves what it cannot ask about by itself, not that a person is
-	// present to answer. "full-access" is a widening of what the run may do
-	// and is only ever used when the caller asked for it by name.
+	// A run started by this library has no terminal to ask on, so "ask"
+	// means fx resolves what it cannot ask about by itself, not that a
+	// person is present to answer. "full-access" is a widening of what
+	// the run may do and is only ever used when the caller asked for it
+	// by name.
 	PermissionMode string
 }
 

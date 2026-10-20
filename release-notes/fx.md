@@ -27,17 +27,24 @@ What fx cannot carry is refused rather than approximated:
   `FxDenyWhenAsked` (the default) or `FxAllowWhenAsked`, never an "always"
   option. fx's own tools stay available, so an fx session is not a read-only
   mode.
+- A permission request that offers two options of the same kind or the same id
+  is answered cancelled, so a deny can never be read as an allow.
 - fx appends session instructions to its own system prompt and offers no way
   to replace it, so a replace request is refused.
 - fx keeps its profile in the user's home directory and has no variable that
-  moves it, so a home that names another directory is refused, and fx's own
-  `FX_` variables are neither inherited nor accepted as additions.
+  moves it, so a home that names another directory is refused. A session
+  inherits none of fx's own `FX_` variables and refuses them as additions,
+  except the operator's own protective switches `FX_MAX_AGENT_STEPS`,
+  `FX_ULTRAFAST` and `FX_AUTO_UPGRADE`, whose bounds, cost and network
+  choices are preserved. fx has no environment variable that carries a privacy
+  guarantee: its Zero Data Retention control is a Gateway account setting.
 - `Complete` is unsupported: fx offers no way to prove its native tools are
   absent. Restricted, sandboxed, browser and compacted sessions, hosted caller
   tools, and fx quota are unsupported too.
 
-New native failure code `CodeHomeUnsupported`. Existing engines, references
-and digests are unchanged.
+New native failure code `CodeHomeUnsupported`. `Policy` gains a field, so
+unkeyed (positional) `Policy` literals no longer compile; keyed literals are
+unaffected. Existing engines, references and digests are unchanged.
 
 A session's `Resume` reports a conversation fx no longer holds as
 `errConversationGone`, and a permission request that offers no option the

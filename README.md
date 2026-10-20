@@ -311,9 +311,9 @@ be empty or name that directory. Every session is put in fx's asking mode,
 which asks before each action that changes anything, and `Policy.FxPermission`
 answers those requests: `session.FxDenyWhenAsked` (the default) rejects each
 one and `session.FxAllowWhenAsked` approves each one once. Neither grants an
-"always" option, and a request that offers no option the policy wants is
-answered cancelled, never guessed. Deny-when-asked is not read-only: fx's own
-tools stay available. The mode is set with `session/set_config_option`, and
+"always" option, and a request that offers no option the policy wants, or two
+options of the same kind or the same id, is answered cancelled, never
+guessed. Deny-when-asked is not read-only: fx's own tools stay available. The mode is set with `session/set_config_option`, and
 the mode, model and effort are checked against the configuration the session
 reports; a value fx refuses, or accepts without applying, is refused before
 the first prompt. fx announces no mode change over the protocol, so a mode
@@ -321,7 +321,11 @@ changed outside the session is not observed. Steering is composed. fx only
 appends session instructions to its own system prompt, so `Instructions` in
 replace mode is refused; restricted, sandboxed, browser and compacted fx
 sessions, account quota windows and constrained completion are unsupported. A
-turn reports its own usage, and the context is fx's own figure.
+session inherits none of fx's own `FX_` variables and refuses them as
+additions, except the operator's own protective switches `FX_MAX_AGENT_STEPS`,
+`FX_ULTRAFAST` and `FX_AUTO_UPGRADE`, whose bounds, cost and network choices
+are preserved. A turn reports its own usage, and the context is fx's own
+figure.
 
 Consume turn events while the turn runs. `Wait` does not drain the stream;
 backpressure fails explicitly instead of silently dropping tool activity.
@@ -1799,8 +1803,9 @@ if err != nil {
   `"auto"` or `"plan"`; empty leaves agy's default, `request-review`, which
   auto-denies any tool needing approval in a non-interactive run) and
   `Config.Fx` (`PermissionMode`: `"ask"`, `"auto"` or `"full-access"`; empty
-  leaves fx's default, which asks). Options for another engine, and `Args` that
-  repeat a flag the library manages, are refused.
+  leaves what fx itself resolves, which is the operator's saved setting). An
+  invalid mode is refused rather than passed to the CLI. Options for another
+  engine, and `Args` that repeat a flag the library manages, are refused.
 - An fx run is one `fx ask --json`, whose document is the whole record: the
   final response, the tools it used and the usage it reported. fx states no
   output schema, so a structured fx run is refused rather than answered with
