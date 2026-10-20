@@ -91,6 +91,22 @@ func commandCodeManaged(key string) bool {
 	return strings.HasPrefix(upper, "CMD_") || strings.HasPrefix(upper, "COMMANDCODE_") || strings.HasPrefix(upper, "COMMAND_CODE_")
 }
 
+// fxManaged is what an fx session never inherits: the variables that would
+// change which sign-in it uses or what it does with one.
+func fxManaged(key string) bool {
+	return strings.HasPrefix(strings.ToUpper(key), "FX_")
+}
+
+// refuseFxAddition refuses every FX_ addition: fx resolves its own sign-in,
+// and the operator's own settings carry over, but a caller sets fx's controls
+// only through Policy.
+func refuseFxAddition(o Options, key, upper string) error {
+	if strings.HasPrefix(upper, "FX_") {
+		return refuse(o, "env", RefusedEnvManaged, "environment addition "+key+" is managed by the harness; fx resolves its own sign-in")
+	}
+	return nil
+}
+
 // sandboxInherited is all a sandboxed session inherits from this process:
 // enough to find the CLI, its login and a shell, and nothing the process
 // happened to have exported.
